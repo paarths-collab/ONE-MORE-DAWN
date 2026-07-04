@@ -47,4 +47,21 @@ describe('crisis pool', () => {
   it('day-zero crisis exists', () => {
     expect(CRISES.some((c) => c.id === 'first_light')).toBe(true);
   });
+
+  it('covers every healthy-city crisis over a long run (no short-orbit lock-in)', () => {
+    // Audit finding: the old linear-stride picker degenerated to a 3-crisis
+    // loop in the healthy case. The seeded picker must cover every crisis
+    // eligible under healthy conditions across a 60-day window.
+    const healthy = { ...baseCity, food: 60, morale: 60 };
+    const seen = new Set<string>();
+    let city = { ...healthy };
+    for (let d = 0; d < 60; d++) {
+      const next = pickNextCrisis({ ...city, day: healthy.day + d });
+      seen.add(next.id);
+      city = { ...city, crisisId: next.id };
+    }
+    for (const id of ['first_light', 'refugee_convoy', 'blackout_ward', 'strange_signal']) {
+      expect(seen).toContain(id);
+    }
+  });
 });

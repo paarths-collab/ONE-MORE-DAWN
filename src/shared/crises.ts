@@ -1,3 +1,4 @@
+import { makeRng } from './rng';
 import type { Crisis, CityState } from './types';
 
 export const CRISES: Crisis[] = [
@@ -93,13 +94,17 @@ const isEligible = (crisis: Crisis, city: CityState): boolean => {
 
 /**
  * Deterministic pick: same city state -> same next crisis. The resolver runs
- * once per day under a lock, but determinism means a retried resolution can
- * never fork reality.
+ * once per day under a lock, so determinism means retries can't fork reality.
+ * Uses the seeded RNG (not a linear stride) so consecutive days decorrelate —
+ * the previous `(day*7 + cycle*13) % n` degenerated to short orbits (a 3-crisis
+ * loop in the healthy case). Seed mixes day and cycle via Knuth/prime
+ * multipliers so nearby seeds land in different buckets.
  */
 export const pickNextCrisis = (city: CityState): Crisis => {
   const pool = CRISES.filter((c) => isEligible(c, city));
   if (pool.length === 0) {
     return getCrisis(city.crisisId === 'first_light' ? 'strange_signal' : 'first_light');
   }
-  return pool[(city.day * 7 + city.cycle * 13) % pool.length]!;
+  const seed = (Math.imul(city.day, 2654435761) ^ Math.imul(city.cycle, 40503)) >>> 0;
+  return pool[makeRng(seed).int(pool.length)]!;
 };
