@@ -1,0 +1,152 @@
+import type {
+  ActionType, CityState, PlayerProfile, TimelineEntry, VoteTally,
+} from '../../shared/types';
+import { KEYS } from './redisKeys';
+
+/** The subset of the Devvit redis client the store uses. Tests provide a fake. */
+export type RedisLike = {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string, options?: { nx?: boolean; expiration?: number }): Promise<string>;
+  del(...keys: string[]): Promise<void>;
+  expire(key: string, seconds: number): Promise<void>;
+  hGet(key: string, field: string): Promise<string | undefined>;
+  hSet(key: string, fieldValues: Record<string, string>): Promise<number>;
+  hGetAll(key: string): Promise<Record<string, string>>;
+  hIncrBy(key: string, field: string, value: number): Promise<number>;
+  hDel(key: string, fields: string[]): Promise<void>;
+  zIncrBy(key: string, member: string, value: number): Promise<number>;
+  zAdd(key: string, ...members: { member: string; score: number }[]): Promise<number>;
+  zRange(
+    key: string, start: number | string, stop: number | string,
+    options?: { reverse?: boolean; by?: 'rank' | 'score' | 'lex' },
+  ): Promise<{ member: string; score: number }[]>;
+};
+
+const toCounts = (raw: Record<string, string>): Record<string, number> =>
+  Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Number(v)]));
+
+export class Store {
+  constructor(private readonly redis: RedisLike) {}
+
+  // ----- city -----
+  async getCityState(): Promise<CityState | undefined> {
+    const raw = await this.redis.get(KEYS.cityState);
+    return raw ? (JSON.parse(raw) as CityState) : undefined;
+  }
+
+  async setCityState(city: CityState): Promise<void> {
+    await this.redis.set(KEYS.cityState, JSON.stringify(city));
+  }
+
+  async getCityMeta(): Promise<Record<string, string>> {
+    return this.redis.hGetAll(KEYS.cityMeta);
+  }
+
+  async setCityMeta(fields: Record<string, string>): Promise<void> {
+    await this.redis.hSet(KEYS.cityMeta, fields);
+  }
+
+  // ----- players -----
+  async getPlayer(userId: string): Promise<PlayerProfile | undefined> {
+    const raw = await this.redis.hGet(KEYS.players, userId);
+    return raw ? (JSON.parse(raw) as PlayerProfile) : undefined;
+  }
+
+  async savePlayer(player: PlayerProfile): Promise<void> {
+    await this.redis.hSet(KEYS.players, { [player.userId]: JSON.stringify(player) });
+  }
+
+  // ----- actions -----
+  async recordAction(day: number, userId: string, action: ActionType): Promise<void> {
+    await this.redis.hIncrBy(KEYS.dayActions(day), action, 1);
+    const raw = await this.redis.hGet(KEYS.dayUserActions(day), userId);
+    const mine: Partial<Record<ActionType, number>> = raw ? JSON.parse(raw) : {};
+    mine[action] = (mine[action] ?? 0) + 1;
+    await this.redis.hSet(KEYS.dayUserActions(day), { [userId]: JSON.stringify(mine) });
+  }
+
+  async getDayActions(day: number): Promise<Record<string, number>> {
+    return toCounts(await this.redis.hGetAll(KEYS.dayActions(day)));
+  }
+
+  async getUserActions(day: number, userId: string): Promise<Partial<Record<ActionType, number>>> {
+    const raw = await this.redis.hGet(KEYS.dayUserActions(day), userId);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  async getAllUserActions(
+    day: number,
+  ): Promise<Record<string, Partial<Record<ActionType, number>>>> {
+    const raw = await this.redis.hGetAll(KEYS.dayUserActions(day));
+    return Object.fromEntries(Object.entries(raw).map(([userId, json]) => [userId, JSON.parse(json)]));
+  }
+
+  // ----- votes (crisis) -----
+  async recordVote(day: number, userId: string, optionId: string): Promise<void> {
+    await this.redis.hSet(KEYS.dayVoters(day), { [userId]: optionId });
+    await this.redis.hIncrBy(KEYS.dayVotes(day), optionId, 1);
+  }
+
+  async getVoterChoice(day: number, userId: string): Promise<string | undefined> {
+    return this.redis.hGet(KEYS.dayVoters(day), userId);
+  }
+
+  async getVoteTally(day: number): Promise<VoteTally> {
+    return toCounts(await this.redis.hGetAll(KEYS.dayVotes(day)));
+  }
+
+  // ----- votes (council strategy) -----
+  async recordStrategyVote(day: number, userId: string, planId: string): Promise<void> {
+    await this.redis.hSet(KEYS.dayStrategyVoters(day), { [userId]: planId });
+    await this.redis.hIncrBy(KEYS.dayStrategyPlan(day), planId, 1);
+  }
+
+  async getStrategyChoice(day: number, userId: string): Promise<string | undefined> {
+    return this.redis.hGet(KEYS.dayStrategyVoters(day), userId);
+  }
+
+  async getStrategyTally(day: number): Promise<VoteTally> {
+    return toCounts(await this.redis.hGetAll(KEYS.dayStrategyPlan(day)));
+  }
+
+  // ----- missions -----
+  async bumpDayMissions(day: number, fields: Record<string, number>): Promise<void> {
+    for (const [field, by] of Object.entries(fields)) {
+      if (by !== 0) await this.redis.hIncrBy(KEYS.dayMissions(day), field, by);
+    }
+  }
+
+  async getDayMissions(day: number): Promise<Record<string, number>> {
+    return toCounts(await this.redis.hGetAll(KEYS.dayMissions(day)));
+  }
+
+  // ----- leaderboards -----
+  async addContribution(userId: string, amount: number): Promise<void> {
+    await this.redis.zIncrBy(KEYS.lbContribution, userId, amount);
+  }
+
+  async recordScoutHaul(userId: string, haul: number): Promise<void> {
+    const existing = await this.redis.zRange(KEYS.lbScouts, 0, -1);
+    const mine = existing.find((e) => e.member === userId);
+    if (!mine || haul > mine.score) {
+      await this.redis.zAdd(KEYS.lbScouts, { member: userId, score: haul });
+    }
+  }
+
+  // ----- timeline + history -----
+  async appendTimeline(entry: TimelineEntry): Promise<void> {
+    await this.redis.hSet(KEYS.timeline, { [String(entry.day)]: JSON.stringify(entry) });
+  }
+
+  async getTimeline(limit: number): Promise<TimelineEntry[]> {
+    const all = await this.redis.hGetAll(KEYS.timeline);
+    return Object.values(all)
+      .map((raw) => JSON.parse(raw) as TimelineEntry)
+      .sort((a, b) => b.day - a.day)
+      .slice(0, limit);
+  }
+
+  async snapshotCity(city: CityState): Promise<void> {
+    await this.redis.hSet(KEYS.cityHistory, { [String(city.day)]: JSON.stringify(city) });
+  }
+}
