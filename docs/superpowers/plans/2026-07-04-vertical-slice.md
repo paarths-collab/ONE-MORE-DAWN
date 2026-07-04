@@ -17,6 +17,7 @@
 2. `mapgen.ts` lives in `src/shared/`, not `src/server/game/` — client and server must generate identical maps from a seed.
 3. Vertical slice ships 6 crises (spec pool of ~10 is completed in Plan 2).
 4. Factions, laws, raids, Council UI, Leaderboard scene: **Plan 2** (per spec build order). The resolver and types are built with those fields present but inert, so Plan 2 extends without migration.
+5. Mission tokens use per-token keys `mission:token:{tokenId}` with a Redis TTL instead of the spec's `mission:tokens` hash — hash fields cannot expire individually, so the hash would accumulate abandoned tokens forever. Per-token keys are safe here because the client always presents the tokenId (no enumeration needed), and TTL guarantees cleanup.
 
 ---
 
@@ -537,7 +538,7 @@ describe('redis keys', () => {
     expect(KEYS.cityState).toBe('city:state');
     expect(KEYS.cityMeta).toBe('city:meta');
     expect(KEYS.players).toBe('players');
-    expect(KEYS.missionTokens).toBe('mission:tokens');
+    expect(KEYS.missionToken('tok-1')).toBe('mission:token:tok-1');
     expect(KEYS.lbContribution).toBe('lb:contribution');
     expect(KEYS.lbScouts).toBe('lb:scouts');
     expect(KEYS.timeline).toBe('timeline');
@@ -562,7 +563,8 @@ export const KEYS = {
   cityState: 'city:state',
   cityMeta: 'city:meta',
   players: 'players',
-  missionTokens: 'mission:tokens',
+  // Per-token key with TTL (plan deviation 5): hash fields cannot expire.
+  missionToken: (tokenId: string) => `mission:token:${tokenId}`,
   lbContribution: 'lb:contribution',
   lbScouts: 'lb:scouts',
   timeline: 'timeline',
@@ -2206,7 +2208,9 @@ menu.post('/reset', async (c) => {
   const cycle = (old?.cycle ?? 0) + 1;
   // Wipe day-scoped keys for the recent past (Devvit Redis cannot enumerate
   // keys; day keys older than the wipe window are orphaned but harmless).
-  const keysToDelete: string[] = [KEYS.cityState, KEYS.timeline, KEYS.cityHistory, KEYS.players, KEYS.missionTokens, KEYS.lbContribution, KEYS.lbScouts];
+  // Mission tokens are per-token keys with TTL — they expire on their own, and
+  // any survivor is rejected by the token.day check after reset.
+  const keysToDelete: string[] = [KEYS.cityState, KEYS.timeline, KEYS.cityHistory, KEYS.players, KEYS.lbContribution, KEYS.lbScouts];
   const lastDay = old?.day ?? 1;
   for (let d = 1; d <= lastDay + 1; d++) {
     keysToDelete.push(
@@ -3000,7 +3004,9 @@ mission.post('/start', async (c) => {
     expiresAtServerMs: now + BALANCE.mission.tokenTtlMs,
     consumed: false,
   };
-  await redis.hSet(KEYS.missionTokens, { [token.tokenId]: JSON.stringify(token) });
+  // Per-token key with TTL (plan deviation 5): abandoned tokens self-clean.
+  await redis.set(KEYS.missionToken(token.tokenId), JSON.stringify(token));
+  await redis.expire(KEYS.missionToken(token.tokenId), Math.ceil(BALANCE.mission.tokenTtlMs / 1000));
 
   // mark mission started in the per-user day log ("mission": 1)
   await redis.hIncrBy(KEYS.dayActions(city.day), 'mission_started', 1);
@@ -3030,8 +3036,8 @@ mission.post('/complete', async (c) => {
   if (!city) return c.json<ApiError>({ status: 'error', message: 'City not initialized' }, 409);
 
   const body = await c.req.json<MissionCompleteRequest>();
-  const rawToken = await redis.hGet(KEYS.missionTokens, body.tokenId);
-  if (!rawToken) return c.json<ApiError>({ status: 'error', message: 'Unknown mission token' }, 404);
+  const rawToken = await redis.get(KEYS.missionToken(body.tokenId));
+  if (!rawToken) return c.json<ApiError>({ status: 'error', message: 'Unknown or expired mission token' }, 404);
   const token = JSON.parse(rawToken) as MissionToken;
 
   const result = evaluateMission(token, body, userId, city.day, city.threat, Date.now());
@@ -3039,8 +3045,8 @@ mission.post('/complete', async (c) => {
     return c.json<ApiError>({ status: 'error', message: result.reason }, 400);
   }
 
-  // consume the token first (single hDel = atomic enough for one field)
-  await redis.hDel(KEYS.missionTokens, [body.tokenId]);
+  // consume the token first (single del = atomic for one key)
+  await redis.del(KEYS.missionToken(body.tokenId));
 
   const items =
     (result.banked.food ?? 0) + (result.banked.medicine ?? 0) + (result.banked.scrap ?? 0);
