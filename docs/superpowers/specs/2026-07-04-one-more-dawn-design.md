@@ -33,8 +33,18 @@ blackouts, refugees, disease, raids.
 3. Spend **3 daily energy** on actions: Grow Food, Repair Generator, Treat Sick,
    Guard Wall — or launch an **Expedition** (Phaser mini-game, see §4)
 4. Cast a vote on today's **Crisis Decision** (one moral/strategic dilemma per day)
-5. Check **leaderboards**, **faction standings**, and the **timeline** (the
+5. Cast a **Council Plan** vote — the day's strategic priority (see §10)
+6. Check **leaderboards**, **faction standings**, and the **timeline** (the
    city's permanent history)
+
+### First-screen copy (onboarding is copy, not just UI)
+
+```
+You live in the last city.
+Spend today's energy to gather resources, vote on a crisis,
+and help the city survive one more dawn.
+Tomorrow, the city changes based on what everyone did.
+```
 
 ### Resources
 
@@ -84,7 +94,7 @@ on app updates).
 | Scene | Purpose |
 |---|---|
 | `Boot` | Load assets, call `/api/init` |
-| `Dashboard` | City report, resources, crisis banner, law, raid clock — the hub |
+| `Dashboard` | City report, resources, crisis banner, law, raid clock, **Council panel** (§10) — the hub |
 | `RoleSelect` | First-visit role pick (changeable once per 3 days) |
 | `Actions` | Spend energy on city actions |
 | `Mission` | Expedition mini-game (§4) |
@@ -101,7 +111,8 @@ on app updates).
 | `POST /api/action` | Spend 1 energy on a city action (server-validated, watch/multi) |
 | `POST /api/mission/start` | Deducts 1 energy, issues mission token `{tokenId, seed}` |
 | `POST /api/mission/complete` | Validates crate IDs against token seed; banks server-calculated loot |
-| `POST /api/vote` | One vote per user per day (watch/multi) |
+| `POST /api/vote` | One crisis vote per user per day (watch/multi) |
+| `POST /api/strategy` | One Council Plan vote per user per day (watch/multi) |
 | `GET /api/leaderboard` | Reads sorted sets + faction standings |
 | `GET /api/timeline` | Reads timeline hash |
 | `POST /api/admin/reset` | Mod/owner only: new cycle |
@@ -148,8 +159,17 @@ day:{n}:missions
 day:{n}:factionInfluence
   hash: factionId -> points
 
+day:{n}:strategyPlan
+  hash: planId -> count
+
+day:{n}:strategyVoters
+  hash: userId -> planId
+
+day:{n}:scoutReports
+  hash: userId -> JSON {crateCount, escaped, injury, shortSummary}
+
 mission:tokens
-  hash: tokenId -> JSON {userId, day, seed, roleAtStart,
+  hash: tokenId -> JSON {userId, day, layoutSeed, lootSeed, roleAtStart,
         startedAtServerMs, expiresAtServerMs, consumed}
 
 lb:contribution
@@ -184,6 +204,22 @@ GET /api/init
     acquired  → run resolver, update city:meta.lastResolvedDate, release lock
     otherwise → return current state with resolving: true
 ```
+
+### Daily player reset (in `/api/init`)
+
+Explicit, or energy bugs happen fast. On every `/api/init`, after any day
+resolution:
+
+```
+if player.lastActiveDay < city.day:
+  player.energyUsedToday = 0
+  player.lastActiveDay = city.day
+  effectiveEnergy = injuredUntilDay >= city.day ? dailyEnergy - 1 : dailyEnergy
+  update streak (consecutive-day check: lastActiveDay == city.day - 1 ? +1 : 1)
+```
+
+`effectiveEnergy` is computed, never stored — the injury penalty derives from
+`injuredUntilDay` so it can't double-apply on refresh.
 
 ### Resolver design
 
@@ -285,8 +321,8 @@ layoutSeed = daySeed                 (same map/hazards/crate positions for all)
 lootSeed   = hash(daySeed + userId)  (crate contents personalized)
 ```
 
-Shared routes fuel comment discussion ("medkit behind the bus") without full
-reward spoilers.
+Shared routes fuel comment discussion — "there's a deep crate behind the bus,
+but the collapse tile near it is risky" — without full reward spoilers.
 
 ### Role hook
 
@@ -302,9 +338,9 @@ missions still count and cannot be rerolled.
 POST /api/mission/start
   check energy available; check no mission already started/completed today
   spend 1 energy (watch/multi); record in day:{n}:userActions
-  create token {tokenId, userId, day, seed, roleAtStart,
+  create token {tokenId, userId, day, layoutSeed, lootSeed, roleAtStart,
                 startedAtServerMs, expiresAtServerMs (5–10 min), consumed: false}
-  return {tokenId, seed}
+  return {tokenId, layoutSeed, lootSeed}
 ```
 
 **Client submits collected crate IDs, not raw loot:**
@@ -317,9 +353,9 @@ POST /api/mission/start
 Server validates: token exists · token.userId matches · token.day is current ·
 not consumed · within expiry · duration plausible · crate IDs exist in the
 seed-generated map · loot ≤ crate manifest · mission not already completed
-today. Then the server **regenerates the map from the token seed and calculates
-loot itself**, banks into `day:{n}:missions`, updates `lb:scouts`, marks the
-token consumed. `roleAtStart` is snapshotted so Scout bonuses and validation
+today. Then the server **regenerates the map from `layoutSeed`, prices the
+crates from `lootSeed`, and calculates loot itself**, banks into
+`day:{n}:missions`, updates `lb:scouts`, marks the token consumed. `roleAtStart` is snapshotted so Scout bonuses and validation
 can't change mid-run.
 
 ### Feel targets
@@ -352,6 +388,27 @@ Jul 11–15: bug buffer, Devvit review, final demo, Devpost submission
 
 Each day ends with something demoable. **🧑 = needs the human.**
 
+### Parallel tracks (what can be built simultaneously)
+
+The type contract enables parallelism: `src/server/game/types.ts` (shared API
+types) is written Day 1, then tracks proceed independently:
+
+| Track | Independent because | Runs in parallel during |
+|---|---|---|
+| **Server routes + Redis store** | Only depends on types + redisKeys | Days 1–4 |
+| **Client scenes on a mock API** | `api.ts` has a mock mode returning fixture JSON; scenes are built against fixtures, swapped to real endpoints when ready | Days 1–4 |
+| **Resolver + balance** | Pure functions, no I/O — developed and unit-tested standalone | Days 2, 5 |
+| **Map generation (`mapgen.ts`)** | Pure seeded function used identically by client and server | Day 3 |
+| **Crisis pool + law table + copy** | Data files (`crises.ts`, `laws.ts`) — content, not systems | Any day |
+
+🧑 **Human-parallel work** (while I code — none of this blocks the code):
+
+- Days 1–2: pick the Kenney tileset + scout sprite + SFX pack (I shortlist 2–3
+  options, you pick the vibe)
+- Days 2–5: playtest every ship check on your phone; note confusion points
+- Day 5+: Devpost copy drafts, screenshot capture, video script review
+- Any day: recruit 1–2 friends for the Day 5 two-human playtest
+
 ### Day 1 — Sat Jul 4: Foundation
 - Scaffold from official Phaser template; git init; repo structure per spec
 - 🧑 `npm run login` (browser auth) + accept dev terms if not done
@@ -360,7 +417,8 @@ Each day ends with something demoable. **🧑 = needs the human.**
 - **Ship check:** game post opens in the test sub. 🧑 confirm it loads on mobile.
 
 ### Day 2 — Sun Jul 5: The strategy loop
-- `players` hash, role select, energy actions (watch/multi), crisis vote, all
+- `players` hash, role select, energy actions (watch/multi), crisis vote,
+  Council strategy vote (`/api/strategy` — same pipeline as crisis vote), all
   `day:{n}` keys
 - Resolver v1 (pure function + unit tests) + `resolver:lock`; timeline;
   `city:history`
@@ -374,16 +432,18 @@ Each day ends with something demoable. **🧑 = needs the human.**
   90s timer, token issue/validate flow per §4
 - 🧑 **Critical playtest: do mobile controls feel good?** If not, fixed Day 4
   morning before anything else.
-- 🧑 **Submit first Devvit review build** (Day 3 night or Day 4) — review takes
-  ~1 week; an honest description + basic playable loop is enough, we keep
-  improving after
+- 🧑 **Submit first Devvit review build as soon as the vertical slice works**,
+  ideally Day 3 night or Day 4 morning — review takes ~1 week; an honest
+  description + basic playable loop is enough, we keep improving after. If the
+  slice is broken, fix it first — submitting a broken build wastes review time.
 - **VERTICAL SLICE LOCK (Day 3 night):** open post → see city → pick role →
   start mission → finish mission → bank loot → see city/timeline affected.
   **If this slice isn't working, stop adding features until it is.**
 
 ### Day 4 — Tue Jul 7: Conflict layer
 - **Must-have:** faction influence, daily law selection, threat/raid clock,
-  mission end screen, Leaderboard scene, Timeline scene
+  mission end screen, Council panel on Dashboard (plan standings + priority
+  badge on Actions screen), Leaderboard scene, Timeline scene
 - **Nice-to-have (first cut if tight):** path preview coloring, extra hazard
   polish, animation juice
 - Never cut: factions, raids
@@ -465,9 +525,12 @@ All balance numbers in `src/server/game/balance.ts` — single tuning surface.
 ## 8. Out of Scope (MVP)
 
 City-vs-city war/attacks · mini-game enemies/combat · scrolling maps · crafting ·
-world map locations · comment/post API integration · achievements/flairs ·
-scheduled cron jobs (lazy resolver instead) · websockets/realtime · external
-DB/hosting · AI-driven content
+world map locations · achievements/flairs · scheduled cron jobs (lazy resolver
+instead) · websockets/realtime · external DB/hosting · AI-driven content ·
+**in-app realtime chat / Redis message feed / DM system / free-text
+unmoderated chat** (Reddit comments are the chat layer — see §10) ·
+`POST /api/share-report` comment creation (stretch only, buffer days, subject
+to Reddit's app-content attribution rules)
 
 ## 9. Success Criteria
 
@@ -477,3 +540,68 @@ DB/hosting · AI-driven content
 4. Laws change hands between factions across a simulated week
 5. A raid fires and the community can see it coming and respond
 6. Demo video + Devpost submitted ≥1 day before the deadline
+
+## 10. Multiplayer & Community Strategy
+
+One More Dawn is multiplayer through shared city state, collective daily
+resolution, faction influence, leaderboards, council planning, and Reddit
+comments. **It is not realtime socket multiplayer.** The city is the shared
+object everyone changes asynchronously. The multiplayer *feel* comes from
+coordination: "We need more Wardens today." "Stop scouting, threat is too
+high." "Vote for rationing or we die tomorrow."
+
+### Multiplayer surfaces
+
+1. Shared city resources
+2. Shared daily crisis vote
+3. Shared Council strategy plan
+4. Shared faction influence race
+5. Shared raid/threat response
+6. Shared timeline/memorial
+7. Reddit comment strategy thread
+8. Leaderboards
+
+### The Council (structured strategy voting)
+
+Separate from the crisis vote. The crisis vote answers *"what decision should
+the city make?"*; the Council Plan answers *"what should players focus their
+energy on today?"*
+
+```
+Today's Council Plan:
+[Stockpile Food] [Repair Power] [Prepare for Raid] [Send Scouts] [Treat the Sick]
+```
+
+- `POST /api/strategy` — one plan vote per user per day (watch/multi), stored
+  in `day:{n}:strategyPlan` / `day:{n}:strategyVoters`
+- **Council panel on the Dashboard** (folded in for MVP, not a separate scene):
+
+```
+THE COUNCIL
+Top plan today: Prepare for Raid — 48%
+Suggested actions: Guard Wall, Repair Generator
+Discuss strategy in the comments.
+```
+
+- The Actions screen shows a nudge badge: `Council Priority: Prepare for Raid`
+- The plan is a **coordination signal, not a mechanic** — it does not modify
+  the resolver. Its power is social: it aligns energy spending.
+
+### Reddit comments are the chat
+
+No custom chat is built. Reddit already has threading, voting, moderation, and
+identity — and Devvit Web is request/response (no websockets), so comments are
+both the native and the technically correct chat layer. The game links out:
+"Discuss strategy in the comments."
+
+**Stretch (buffer days only):** `POST /api/share-report` — post-mission, offer
+"Share a scout report?" which creates a Reddit comment like *"Scout Report —
+Day 4: escaped with food and medicine. Watch the collapse tiles near the
+eastern lane."* Requires the userActions permission and must follow Reddit's
+content-attribution rules for app-created comments. Cut without hesitation if
+time is short.
+
+### Explicitly not building
+
+In-app realtime chat · Redis message feed · DM system · websocket chat ·
+city-vs-city live war · free-text unmoderated chat inside the app.
