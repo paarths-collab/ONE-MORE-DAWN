@@ -172,6 +172,37 @@ export class Dashboard extends Phaser.Scene {
       );
     }
 
+    // "Tomorrow if nobody acts" forecast strip — one line in the 410–426 gap
+    // between CITY REPORT and YESTERDAY. No panel chrome, just text. The whole
+    // stats string goes warn-colored when any shown stat worsens (simpler and
+    // more readable than per-segment coloring at this size).
+    const f = data.forecast;
+    const worsens =
+      f.food < city.food || f.power < city.power || f.morale < city.morale ||
+      f.threat > city.threat;
+    const fLabel = this.add.text(20, 414, 'TOMORROW IF NOBODY ACTS:  ', {
+      fontFamily: FONT,
+      fontSize: '15px',
+      color: COLORS.dim,
+    });
+    const fStats = this.add.text(
+      20 + fLabel.width,
+      414,
+      `food ${city.food}→${f.food} · power ${city.power}→${f.power} · morale ${city.morale}→${f.morale} · threat ${city.threat}→${f.threat}`,
+      {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: worsens ? '#d9a429' : COLORS.dim,
+      },
+    );
+    if (f.raidLikely) {
+      this.add.text(fStats.x + fStats.width, 414, ' · ⚠ RAID', {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: '#c4453c',
+      });
+    }
+
     if (data.timelinePreview) {
       const yest = panel(this, 20, 426, W - 40, 124, 'YESTERDAY');
       yest.add(

@@ -8,6 +8,7 @@ import type {
   ApiError,
   DawnReport,
   FactionId,
+  Forecast,
   InitResponse,
   LeaderboardEntry,
   LeaderboardResponse,
@@ -22,6 +23,7 @@ import type {
 import { validateAction, validateRoleChange } from '../game/actionRules';
 import { bumpRoleRep, effectiveEnergy, freshPlayer, resetPlayerForDay } from '../game/dayLogic';
 import { runLazyResolution } from '../game/lazyResolve';
+import { resolveDay } from '../game/resolver';
 import { KEYS } from '../storage/redisKeys';
 import { Store, type RedisLike } from '../storage/store';
 
@@ -111,6 +113,28 @@ api.get('/init', async (c) => {
 
   const store = getStore();
   const { city, resolving } = await runLazyResolution(store, redisLike, new Date());
+
+  // "Tomorrow if nobody acts": a zero-action projection of today's resolution.
+  // resolveDay is pure and cheap (no I/O, never mutates city) — safe inline.
+  // It intentionally ignores actions already recorded today. Computed even for
+  // fallen cities (the dashboard early-returns there; the type must be filled).
+  const projected = resolveDay(city, {
+    actions: {},
+    missions: {},
+    crisisVotes: {},
+    roleCounts: {},
+    activeUserCount: 0,
+    factionInfluence: {},
+    strategyVotes: {},
+  }).city;
+  const forecast: Forecast = {
+    food: projected.food,
+    power: projected.power,
+    medicine: projected.medicine,
+    morale: projected.morale,
+    threat: projected.threat,
+    raidLikely: city.threat + BALANCE.passiveThreatRise >= BALANCE.raid.triggerThreshold,
+  };
 
   // Only fresh players pay the Reddit username RPC — existing profiles skip it.
   let player = await store.getPlayer(user.userId);
@@ -213,6 +237,7 @@ api.get('/init', async (c) => {
     yourFactionRep: player.factionRep,
     dawnReport,
     firstVisitToday,
+    forecast,
   });
 });
 

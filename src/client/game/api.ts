@@ -1,7 +1,7 @@
 import type {
   ActionResponse, ActionType, ApiError, InitResponse, LeaderboardResponse,
-  MissionCompleteRequest, MissionCompleteResponse, MissionStartResponse, Role,
-  RoleResponse, StrategyPlanId, StrategyResponse, TimelineResponse, VoteResponse,
+  MissionCompleteRequest, MissionCompleteResponse, MissionRoute, MissionStartResponse,
+  Role, RoleResponse, StrategyPlanId, StrategyResponse, TimelineResponse, VoteResponse,
 } from '../../shared/types';
 
 /** Flip to true to develop scenes without a Devvit playtest. */
@@ -77,6 +77,7 @@ const mockInit: InitResponse = {
   factionInfluence: { builders: 8, wardens: 6, seekers: 12, hearth: 4 },
   yourFaction: null,
   yourFactionRep: 0,
+  forecast: { food: 8, power: 24, medicine: 5, morale: 38, threat: 76, raidLikely: false },
 };
 
 // ---------- public api ----------
@@ -127,6 +128,7 @@ export const api = {
           layoutSeed: 4242,
           lootSeed: 999,
           airSeconds: 105,
+          route: 'deep' satisfies MissionRoute,
           player: mockInit.player,
           effectiveEnergy: 2,
         })
