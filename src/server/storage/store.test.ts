@@ -51,7 +51,7 @@ export const makeFakeRedis = (): RedisLike => {
 };
 
 const city: CityState = {
-  day: 1, cycle: 1, status: 'alive',
+  day: 1, cycle: 1, status: 'alive', worldSeed: 0, trait: 'standard',
   population: 120, food: 60, power: 55, medicine: 20,
   morale: 60, threat: 30, defense: 40,
   crisisId: 'first_light', activeLaw: null, lawExpiresDay: 0,
@@ -70,6 +70,24 @@ describe('Store', () => {
     expect(await store.getCityState()).toBeUndefined();
     await store.setCityState(city);
     expect(await store.getCityState()).toEqual(city);
+  });
+
+  it('backfills worldSeed/trait when reading pre-W1 city JSON', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    // Simulate a city stored before per-world seeds shipped.
+    const { worldSeed: _ws, trait: _tr, ...legacy } = city;
+    await redis.set('city:state', JSON.stringify(legacy));
+    const loaded = await store.getCityState();
+    expect(loaded).toEqual({ ...legacy, worldSeed: 0, trait: 'standard' });
+  });
+
+  it('does not clobber stored worldSeed/trait when present', async () => {
+    const store = new Store(makeFakeRedis());
+    await store.setCityState({ ...city, worldSeed: 987, trait: 'frozen' });
+    const loaded = await store.getCityState();
+    expect(loaded?.worldSeed).toBe(987);
+    expect(loaded?.trait).toBe('frozen');
   });
 
   it('round-trips player profiles in the players hash', async () => {

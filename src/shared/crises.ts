@@ -98,13 +98,15 @@ const isEligible = (crisis: Crisis, city: CityState): boolean => {
  * Uses the seeded RNG (not a linear stride) so consecutive days decorrelate —
  * the previous `(day*7 + cycle*13) % n` degenerated to short orbits (a 3-crisis
  * loop in the healthy case). Seed mixes day and cycle via Knuth/prime
- * multipliers so nearby seeds land in different buckets.
+ * multipliers so nearby seeds land in different buckets, and folds in the
+ * per-city worldSeed (W1) so different installations see different sequences.
  */
 export const pickNextCrisis = (city: CityState): Crisis => {
   const pool = CRISES.filter((c) => isEligible(c, city));
   if (pool.length === 0) {
     return getCrisis(city.crisisId === 'first_light' ? 'strange_signal' : 'first_light');
   }
-  const seed = (Math.imul(city.day, 2654435761) ^ Math.imul(city.cycle, 40503)) >>> 0;
+  const seed =
+    (Math.imul(city.day, 2654435761) ^ Math.imul(city.cycle, 40503) ^ city.worldSeed) >>> 0;
   return pool[makeRng(seed).int(pool.length)]!;
 };

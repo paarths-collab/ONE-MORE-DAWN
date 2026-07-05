@@ -202,6 +202,64 @@ describe('resolveDay', () => {
     expect(resolveDay(city({ threat: 100 }), inp)).toEqual(resolveDay(city({ threat: 100 }), inp));
   });
 
+  describe('city traits (W1)', () => {
+    it('worldSeed 0 is the neutral path: standard trait, unmodified start values', () => {
+      const fresh = newCityState(1); // default worldSeed 0
+      expect(fresh.worldSeed).toBe(0);
+      expect(fresh.trait).toBe('standard');
+      expect(fresh.population).toBe(BALANCE.start.population);
+      expect(fresh.food).toBe(BALANCE.start.food);
+      expect(fresh.power).toBe(BALANCE.start.power);
+      expect(fresh.medicine).toBe(BALANCE.start.medicine);
+      expect(fresh.morale).toBe(BALANCE.start.morale);
+      expect(fresh.threat).toBe(BALANCE.start.threat);
+      expect(fresh.defense).toBe(BALANCE.start.defense);
+    });
+
+    it('trait roll is deterministic per (worldSeed, cycle) and varies across them', () => {
+      // Same inputs, same trait — creation retries cannot fork reality.
+      for (const seed of [1, 42, 999999, 0x7fffffff]) {
+        for (const cyc of [1, 2, 7]) {
+          expect(newCityState(cyc, seed).trait).toBe(newCityState(cyc, seed).trait);
+        }
+      }
+      // Across many (worldSeed, cycle) pairs the roll must produce more than
+      // one distinct trait (otherwise the picker degenerated).
+      const seen = new Set<string>();
+      for (let seed = 1; seed <= 40; seed++) seen.add(newCityState(1, seed).trait);
+      expect(seen.size).toBeGreaterThan(1);
+    });
+
+    it('crowded start: a third more mouths, a third less food (rounded)', () => {
+      // Find a (worldSeed, cycle=1) that rolls 'crowded' — deterministic scan.
+      let seed = 1;
+      while (newCityState(1, seed).trait !== 'crowded') seed++;
+      const crowded = newCityState(1, seed);
+      expect(crowded.population).toBe(Math.round(BALANCE.start.population * 1.34)); // 161
+      expect(crowded.food).toBe(Math.round(BALANCE.start.food * 0.66)); // 40
+      // untouched stats stay at baseline
+      expect(crowded.medicine).toBe(BALANCE.start.medicine);
+      expect(crowded.defense).toBe(BALANCE.start.defense);
+    });
+
+    it('frozen resolver effect: power decays faster, food is consumed less', () => {
+      const standard = city({ power: 80, food: 50, population: 100 });
+      const frozen = { ...standard, trait: 'frozen' as const };
+      const s = resolveDay(standard, noInputs).city;
+      const f = resolveDay(frozen, noInputs).city;
+      expect(f.power).toBeLessThan(s.power); // 1.5x passive decay
+      expect(f.food).toBeGreaterThan(s.food); // 0.85x consumption
+    });
+
+    it('standard trait resolves identically to the pre-trait resolver baseline', () => {
+      const base = city({ power: 80, food: 50, population: 100 });
+      const { city: next } = resolveDay(base, noInputs);
+      // Exact legacy numbers: decay 3, consumption ceil(100*0.15)=15.
+      expect(next.power).toBe(80 - BALANCE.passivePowerDecay);
+      expect(next.food).toBe(50 - Math.ceil(100 * BALANCE.foodPerPopulation));
+    });
+  });
+
   describe('council unity (S2)', () => {
     it('grants the morale bonus when the city rallies behind the winning plan', () => {
       const actions = { repair_power: 7, grow_food: 3 }; // 7/10 = 0.7 >= 0.6

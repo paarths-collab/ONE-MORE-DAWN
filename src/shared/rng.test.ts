@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashString, makeRng } from './rng';
+import { deriveLayoutSeed, hashString, makeRng } from './rng';
 
 describe('makeRng', () => {
   it('is deterministic for the same seed', () => {
@@ -40,5 +40,22 @@ describe('hashString', () => {
     expect(hashString('42-t2_abc')).toBe(hashString('42-t2_abc'));
     expect(hashString('42-t2_abc')).not.toBe(hashString('42-t2_abd'));
     expect(Number.isInteger(hashString('anything'))).toBe(true);
+  });
+});
+
+describe('deriveLayoutSeed (W1)', () => {
+  it('is deterministic for the same (worldSeed, cycle, day)', () => {
+    expect(deriveLayoutSeed(123, 1, 5)).toBe(deriveLayoutSeed(123, 1, 5));
+  });
+
+  it('differs across worldSeeds on the same (cycle, day)', () => {
+    // The core W1 fix: two installations never share a map layout.
+    expect(deriveLayoutSeed(111111, 1, 1)).not.toBe(deriveLayoutSeed(222222, 1, 1));
+    expect(deriveLayoutSeed(0, 1, 1)).not.toBe(deriveLayoutSeed(1, 1, 1));
+  });
+
+  it('differs across days and cycles within one world', () => {
+    expect(deriveLayoutSeed(123, 1, 1)).not.toBe(deriveLayoutSeed(123, 1, 2));
+    expect(deriveLayoutSeed(123, 1, 1)).not.toBe(deriveLayoutSeed(123, 2, 1));
   });
 });

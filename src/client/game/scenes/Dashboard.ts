@@ -56,16 +56,33 @@ export class Dashboard extends Phaser.Scene {
     const who = player.title
       ? `${player.username} “${player.title}” the ${player.role ?? 'undecided'}`
       : `${player.username} the ${player.role ?? 'undecided'}`;
+    // A non-standard city trait replaces the bare cycle number in the subtitle
+    // (the trait names the cycle, it doesn't stack on it).
+    const traitActive = data.trait.id !== 'standard';
+    const prefix = traitActive ? data.trait.label : `Cycle ${city.cycle}`;
     const subtitle = this.add
-      .text(W / 2, 74, `Cycle ${city.cycle} · ${who} · streak ${player.streak}`, {
+      .text(W / 2, 74, `${prefix} · ${who} · streak ${player.streak}`, {
         fontFamily: FONT,
         fontSize: '18px',
         color: COLORS.dim,
       })
       .setOrigin(0.5, 0);
-    // Titled names can overflow at 18px — drop the cycle prefix rather than shrink.
+    // Titled names can overflow at 18px — drop the prefix rather than shrink.
     if (player.title && subtitle.width > W - 40) {
       subtitle.setText(`${who} · streak ${player.streak}`);
+    }
+    // Trait blurb: one dim line tucked under the subtitle at y=96. A 13px line
+    // starting at y=96 extends past y=100, where the law banner panel begins —
+    // so whenever an active law exists the blurb ALWAYS collides and is skipped
+    // (the subtitle label still names the trait).
+    if (traitActive && !data.activeLaw) {
+      this.add
+        .text(W / 2, 96, data.trait.blurb, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: COLORS.dim,
+        })
+        .setOrigin(0.5, 0);
     }
 
     if (city.status === 'fallen') {

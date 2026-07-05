@@ -16,12 +16,18 @@ export type CityStatus = 'alive' | 'fallen';
 // Factions exist in types from day one so Plan 2 adds no migration.
 export type FactionId = 'builders' | 'wardens' | 'seekers' | 'hearth';
 
+// Per-city starting trait, rolled deterministically from (worldSeed, cycle).
+export type CityTraitId = 'standard' | 'frozen' | 'crowded' | 'militarized' | 'sick';
+
 // ---------- Persistent state ----------
 
 export type CityState = {
   day: number;
   cycle: number;
   status: CityStatus;
+  /** Per-installation seed (hash of subredditId); 0 = neutral/test world. */
+  worldSeed: number;
+  trait: CityTraitId;
   population: number;
   food: number;
   power: number; // 0..100 (%)
@@ -159,6 +165,7 @@ export type InitResponse = {
   dawnReport: DawnReport | null;
   firstVisitToday: boolean;
   forecast: Forecast;
+  trait: { id: CityTraitId; label: string; blurb: string };
 };
 
 export type RoleRequest = { role: Role };

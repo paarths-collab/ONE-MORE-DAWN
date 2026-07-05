@@ -20,6 +20,7 @@ import type {
   VoteRequest,
   VoteResponse,
 } from '../../shared/types';
+import { hashString } from '../../shared/rng';
 import { validateAction, validateRoleChange } from '../game/actionRules';
 import { bumpRoleRep, effectiveEnergy, freshPlayer, resetPlayerForDay } from '../game/dayLogic';
 import { runLazyResolution } from '../game/lazyResolve';
@@ -101,6 +102,13 @@ export const requireUser = (): { userId: string } | undefined => {
   return userId ? { userId } : undefined;
 };
 
+/**
+ * Per-installation world seed (W1): hash of the subreddit id, so every
+ * subreddit gets its own maps, crisis sequence, and city trait. BaseContext
+ * types subredditId as non-optional T5; the fallback guards local harnesses.
+ */
+export const deriveWorldSeed = (): number => hashString(context.subredditId ?? 'local');
+
 api.get('/init', async (c) => {
   const { postId } = context;
   if (!postId) {
@@ -112,7 +120,7 @@ api.get('/init', async (c) => {
   }
 
   const store = getStore();
-  const { city, resolving } = await runLazyResolution(store, redisLike, new Date());
+  const { city, resolving } = await runLazyResolution(store, redisLike, new Date(), deriveWorldSeed());
 
   // "Tomorrow if nobody acts": a zero-action projection of today's resolution.
   // resolveDay is pure and cheap (no I/O, never mutates city) — safe inline.
@@ -238,6 +246,11 @@ api.get('/init', async (c) => {
     dawnReport,
     firstVisitToday,
     forecast,
+    trait: {
+      id: city.trait,
+      label: BALANCE.traits[city.trait].label,
+      blurb: BALANCE.traits[city.trait].blurb,
+    },
   });
 });
 

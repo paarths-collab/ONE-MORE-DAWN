@@ -3,7 +3,7 @@ import { CRISES, getCrisis, pickNextCrisis } from './crises';
 import type { CityState } from './types';
 
 const baseCity: CityState = {
-  day: 3, cycle: 1, status: 'alive',
+  day: 3, cycle: 1, status: 'alive', worldSeed: 0, trait: 'standard',
   population: 120, food: 60, power: 55, medicine: 20,
   morale: 60, threat: 30, defense: 40,
   crisisId: 'first_light', activeLaw: null, lawExpiresDay: 0,
@@ -46,6 +46,20 @@ describe('crisis pool', () => {
 
   it('day-zero crisis exists', () => {
     expect(CRISES.some((c) => c.id === 'first_light')).toBe(true);
+  });
+
+  it('different worldSeeds diverge within a 10-day window on the same (day, cycle)', () => {
+    // W1: two installations must not live near-identical early games. At least
+    // one day in the window must pick a different crisis across worlds.
+    const worldA = { ...baseCity, worldSeed: 111111 };
+    const worldB = { ...baseCity, worldSeed: 222222 };
+    let diverged = false;
+    for (let d = 0; d < 10; d++) {
+      const a = pickNextCrisis({ ...worldA, day: worldA.day + d });
+      const b = pickNextCrisis({ ...worldB, day: worldB.day + d });
+      if (a.id !== b.id) diverged = true;
+    }
+    expect(diverged).toBe(true);
   });
 
   it('covers every healthy-city crisis over a long run (no short-orbit lock-in)', () => {

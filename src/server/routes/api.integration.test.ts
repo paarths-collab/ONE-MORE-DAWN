@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../../shared/balance';
 import { generateMap, rollCrateContents } from '../../shared/mapgen';
-import { hashString } from '../../shared/rng';
+import { deriveLayoutSeed, hashString } from '../../shared/rng';
 import type { CityState, PlayerProfile } from '../../shared/types';
 import { validateAction, validateRoleChange } from '../game/actionRules';
 import { freshPlayer, resetPlayerForDay } from '../game/dayLogic';
@@ -35,15 +35,19 @@ describe('vertical slice', () => {
     const day1 = new Date('2026-07-05T09:00:00Z');
     const day2 = new Date('2026-07-06T09:00:00Z');
 
-    // 1. First init creates the city on day 1.
-    const first = await runLazyResolution(store, redis, day1);
+    // Per-installation world seed (W1): mirrors hashString(subredditId) in /init.
+    const worldSeed = hashString('t5_slice');
+
+    // 1. First init creates the city on day 1, stamped with the world seed.
+    const first = await runLazyResolution(store, redis, day1, worldSeed);
     expect(first.city.day).toBe(1);
     expect(first.city.status).toBe('alive');
     expect(first.resolving).toBe(false);
     expect(first.city.crisisId).toBe('first_light');
+    expect(first.city.worldSeed).toBe(worldSeed);
 
     // 1a. Same-day repeat is a no-op — idempotent.
-    const firstAgain = await runLazyResolution(store, redis, day1);
+    const firstAgain = await runLazyResolution(store, redis, day1, worldSeed);
     expect(firstAgain.city).toEqual(first.city);
 
     // 2. Create Alice and set her role to farmer (first pick is free).
@@ -64,8 +68,9 @@ describe('vertical slice', () => {
     }
     expect(await store.getDayActions(first.city.day)).toEqual({ grow_food: 2 });
 
-    // 4. Mission: deterministic token → server-side evaluation.
-    const layoutSeed = hashString(`cycle${first.city.cycle}-day${first.city.day}`);
+    // 4. Mission: deterministic token → server-side evaluation. Layout seed is
+    // salted by the city's worldSeed (W1) — mirrors /mission/start.
+    const layoutSeed = deriveLayoutSeed(first.city.worldSeed, first.city.cycle, first.city.day);
     const lootSeed = hashString(`${layoutSeed}-${alice.userId}`);
     const startedAt = 1_000_000;
     const token: MissionToken = {
@@ -117,7 +122,7 @@ describe('vertical slice', () => {
     expect(await store.getStrategyTally(first.city.day)).toEqual({ stockpile_food: 1 });
 
     // 6. Force a day rollover — UTC date changed, so resolver fires.
-    const resolved = await runLazyResolution(store, redis, day2);
+    const resolved = await runLazyResolution(store, redis, day2, worldSeed);
     expect(resolved.city.day).toBe(2);
     expect(resolved.city.status).toBe('alive');
     expect(resolved.resolving).toBe(false);
@@ -139,7 +144,7 @@ describe('vertical slice', () => {
     expect(await store.getDayActions(1)).toEqual({ grow_food: 2 });
 
     // 6d. Second run at day 2 is idempotent — lastResolvedDate guards it.
-    const resolvedAgain = await runLazyResolution(store, redis, day2);
+    const resolvedAgain = await runLazyResolution(store, redis, day2, worldSeed);
     expect(resolvedAgain.city).toEqual(resolved.city);
     expect((await store.getTimeline(10)).length).toBe(1);
 
@@ -256,7 +261,7 @@ describe('conflict layer', () => {
 
   it('Scenario D: desperate route allows (and pays for) a 9-crate haul deep would reject', () => {
     const city = newCityState(1);
-    const layoutSeed = hashString(`cycle${city.cycle}-day${city.day}`);
+    const layoutSeed = deriveLayoutSeed(city.worldSeed, city.cycle, city.day);
     const lootSeed = hashString(`${layoutSeed}-t2_eve`);
     const startedAt = 1_000_000;
     const desperateToken: MissionToken = {

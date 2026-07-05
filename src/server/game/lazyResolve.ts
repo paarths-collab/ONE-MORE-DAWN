@@ -14,11 +14,15 @@ export type LazyResolutionResult = { city: CityState; resolving: boolean };
  * Spec §2 resolver flow. Creates the city on first call; resolves the previous
  * day when the UTC date has rolled over; both under an NX lock so concurrent
  * midnight requests cannot double-resolve.
+ *
+ * `worldSeed` (W1) is only consumed on the creation path — it stamps the new
+ * city with its per-installation seed and trait. Pass 0 for the neutral path.
  */
 export const runLazyResolution = async (
   store: Store,
   redis: RedisLike,
   now: Date,
+  worldSeed: number,
 ): Promise<LazyResolutionResult> => {
   const today = utcDateString(now);
   let city = await store.getCityState();
@@ -37,7 +41,7 @@ export const runLazyResolution = async (
   // covers both (see RedisClient.set in @devvit/redis: Promise<string>).
   const acquired = Boolean(await redis.set(KEYS.resolverLock, today, { nx: true }));
   if (!acquired) {
-    return { city: city ?? newCityState(1), resolving: true };
+    return { city: city ?? newCityState(1, worldSeed), resolving: true };
   }
 
   try {
@@ -47,7 +51,7 @@ export const runLazyResolution = async (
     const freshMeta = await store.getCityMeta();
 
     if (city === undefined) {
-      city = newCityState(1);
+      city = newCityState(1, worldSeed);
       await store.setCityState(city);
       await store.setCityMeta({ lastResolvedDate: today, schemaVersion: '1' });
       return { city, resolving: false };

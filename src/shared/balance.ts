@@ -1,4 +1,4 @@
-import type { ActionType, FactionId, MissionRoute, ResourceDelta, Role, StrategyPlanId } from './types';
+import type { ActionType, CityTraitId, FactionId, MissionRoute, ResourceDelta, Role, StrategyPlanId } from './types';
 
 export const BALANCE = {
   dailyEnergy: 3,
@@ -142,6 +142,23 @@ export const BALANCE = {
     guard:    [ { rep: 25, title: 'Watchman' },     { rep: 75, title: 'Wall Keeper' },   { rep: 150, title: 'Red Signal Veteran' } ],
     speaker:  [ { rep: 25, title: 'Crier' },        { rep: 75, title: 'Voice of Dawn' }, { rep: 150, title: 'The Conscience' } ],
   } satisfies Record<Role, { rep: number; title: string }[]>,
+
+  // ---------- City traits (W1): per-world starting conditions ----------
+  traits: {
+    standard:    { label: 'Standard Dawn',      blurb: 'A typical beginning. No modifiers.' },
+    frozen:      { label: 'Frozen Start',       blurb: 'Power decays 50% faster; food keeps 15% longer.' },
+    crowded:     { label: 'Crowded Start',      blurb: 'A third more mouths; a third less food to start.' },
+    militarized: { label: 'Militarized Start',  blurb: 'High walls, low spirits: +20 defense, -15 morale to start.' },
+    sick:        { label: 'Sick Start',         blurb: 'The cough came early: half the starting medicine.' },
+  } satisfies Record<CityTraitId, { label: string; blurb: string }>,
+  // Start modifiers (applied once at city creation) and ongoing multipliers
+  // (resolver). Cast follows the approved roleBonus precedent in this file.
+  traitEffects: {
+    frozen:      { powerDecayMult: 1.5, foodConsumeMult: 0.85 },
+    crowded:     { startPopulationMult: 1.34, startFoodMult: 0.66 },
+    militarized: { startDefenseDelta: 20, startMoraleDelta: -15 },
+    sick:        { startMedicineMult: 0.5 },
+  } as Partial<Record<CityTraitId, { powerDecayMult?: number; foodConsumeMult?: number; startPopulationMult?: number; startFoodMult?: number; startDefenseDelta?: number; startMoraleDelta?: number; startMedicineMult?: number }>>,
 
   laws: {
     builders: { id: 'builders' as const, label: 'Emergency Engineering', buff: 'Repair actions +25% power', cost: 'Morale actions cost +1 energy' },

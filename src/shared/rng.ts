@@ -48,3 +48,10 @@ export const hashString = (input: string): number => {
   }
   return hash >>> 0;
 };
+
+/**
+ * Day-shared mission layout seed, salted by the per-city worldSeed (W1) so two
+ * subreddit installations never share the same map on the same (cycle, day).
+ */
+export const deriveLayoutSeed = (worldSeed: number, cycle: number, day: number): number =>
+  hashString(`${worldSeed}-cycle${cycle}-day${day}`);

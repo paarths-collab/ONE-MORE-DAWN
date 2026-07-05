@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { context, redis } from '@devvit/web/server';
 import { BALANCE } from '../../shared/balance';
-import { hashString } from '../../shared/rng';
+import { deriveLayoutSeed, hashString } from '../../shared/rng';
 import type {
   ApiError,
   MissionCompleteRequest,
@@ -80,8 +80,8 @@ mission.post('/start', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'Busy — try again' }, 409);
   }
 
-  // day-shared layout, per-user loot (spec §4)
-  const layoutSeed = hashString(`cycle${city.cycle}-day${city.day}`);
+  // day-shared layout salted by the city's worldSeed (W1), per-user loot (spec §4)
+  const layoutSeed = deriveLayoutSeed(city.worldSeed, city.cycle, city.day);
   const lootSeed = hashString(`${layoutSeed}-${userId}`);
   const now = Date.now();
   const token: MissionToken = {

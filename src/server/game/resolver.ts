@@ -1,7 +1,8 @@
 import { BALANCE } from '../../shared/balance';
 import { getCrisis, pickNextCrisis } from '../../shared/crises';
+import { makeRng } from '../../shared/rng';
 import type {
-  CityState, FactionId, ResourceDelta, Role, StrategyPlanId, TimelineEntry,
+  CityState, CityTraitId, FactionId, ResourceDelta, Role, StrategyPlanId, TimelineEntry,
 } from '../../shared/types';
 
 /** Aggregates for the day being resolved. All plain data from Redis hashes. */
@@ -93,15 +94,51 @@ const winningPlan = (votes: Record<string, number>): StrategyPlanId | null => {
 
 export type ResolveResult = { city: CityState; entry: TimelineEntry };
 
-export const newCityState = (cycle: number): CityState => ({
-  day: 1,
-  cycle,
-  status: 'alive',
-  ...BALANCE.start,
-  crisisId: 'first_light',
-  activeLaw: null,
-  lawExpiresDay: 0,
-});
+const TRAIT_IDS: CityTraitId[] = ['standard', 'frozen', 'crowded', 'militarized', 'sick'];
+
+/**
+ * Deterministic trait roll per (worldSeed, cycle). worldSeed 0 is the
+ * documented neutral/test path: it SKIPS the roll and always yields
+ * 'standard', so legacy fixtures keep their exact start values.
+ */
+const rollTrait = (worldSeed: number, cycle: number): CityTraitId => {
+  if (worldSeed === 0) return 'standard';
+  return TRAIT_IDS[makeRng((worldSeed ^ Math.imul(cycle, 40503)) >>> 0).int(TRAIT_IDS.length)]!;
+};
+
+export const newCityState = (cycle: number, worldSeed = 0): CityState => {
+  const trait = rollTrait(worldSeed, cycle);
+  const fx = BALANCE.traitEffects[trait];
+  return {
+    day: 1,
+    cycle,
+    status: 'alive',
+    worldSeed,
+    trait,
+    ...BALANCE.start,
+    population: Math.round(BALANCE.start.population * (fx?.startPopulationMult ?? 1)),
+    food: Math.round(BALANCE.start.food * (fx?.startFoodMult ?? 1)),
+    medicine: Math.round(BALANCE.start.medicine * (fx?.startMedicineMult ?? 1)),
+    defense: BALANCE.start.defense + (fx?.startDefenseDelta ?? 0),
+    morale: BALANCE.start.morale + (fx?.startMoraleDelta ?? 0),
+    crisisId: 'first_light',
+    activeLaw: null,
+    lawExpiresDay: 0,
+  };
+};
+
+/**
+ * Ongoing multipliers implied by the city's trait (W1). Defaults are no-op —
+ * 'standard' (and any trait without effects) resolves identically to the
+ * pre-trait resolver, keeping legacy numeric assertions intact.
+ */
+const traitMultipliers = (city: CityState) => {
+  const fx = BALANCE.traitEffects[city.trait];
+  return {
+    powerDecayMult: fx?.powerDecayMult ?? 1,
+    foodConsumeMult: fx?.foodConsumeMult ?? 1,
+  };
+};
 
 const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const clampStock = (n: number) => Math.max(0, Math.round(n));
@@ -125,6 +162,8 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
 
   // Law modifiers from yesterday's winning faction (applied to today's day).
   const law = lawMultipliers(city);
+  // Trait modifiers are permanent for the city's whole cycle (W1).
+  const trait = traitMultipliers(city);
 
   // --- 1. action + mission production ---
   let food =
@@ -136,7 +175,7 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
     city.power +
     a('repair_power') * (BALANCE.actionEffects.repair_power.power ?? 0) * law.repairMult +
     m('totalScrap') - // scrap feeds the generators
-    BALANCE.passivePowerDecay -
+    BALANCE.passivePowerDecay * trait.powerDecayMult - // frozen: faster decay
     inputs.activeUserCount * BALANCE.scaling.activePlayerPowerDrain;
   let medicine =
     city.medicine +
@@ -204,7 +243,8 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
   const consumed = Math.ceil(
     (Math.ceil(population * BALANCE.foodPerPopulation) +
       Math.ceil(inputs.activeUserCount * BALANCE.scaling.activePlayerFoodDrain)) *
-      law.foodConsumeMult, // wardens: +10% food consumption
+      law.foodConsumeMult * // wardens: +10% food consumption
+      trait.foodConsumeMult, // frozen: food keeps longer (composes multiplicatively)
   );
   food -= consumed;
   if (food < 0) {

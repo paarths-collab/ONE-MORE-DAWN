@@ -56,6 +56,10 @@ One lesson per bullet. Update rather than duplicate; delete if proven wrong.
   template client scenes until Task 16; do not delete before then.
 - Conventions: type aliases over interfaces, named exports, never cast types
   (exception: approved casts inside `src/shared/balance.ts`).
+- Scenario variety (W1): CityState.worldSeed (hash of subredditId; 0 = neutral
+  'standard' test path) salts mission layout seeds and crisis picks; city
+  traits are drawn per (worldSeed, cycle) from BALANCE.traits/traitEffects.
+  Keep new variety features data-driven in balance.ts — the Supercell pattern.
 
 ## Testing
 - Vertical slice integration test lives at

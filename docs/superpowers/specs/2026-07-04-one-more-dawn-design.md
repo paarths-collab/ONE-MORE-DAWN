@@ -687,3 +687,46 @@ No loot boxes, no punishing streak loss, no fake urgency. Retention comes
 from **consequence** (the city is different tomorrow because of you) and
 **recognition** (titles, leaderboards, the Dawn Report) — not from
 manufactured anxiety.
+
+## 13. Scenario Variety & World Structure
+
+**The problem this fixes.** Mission layout seeds and crisis picks were keyed
+only on `(cycle, day)` — so every subreddit's city rolled the identical map
+layout and the same early crises. Different communities, one world. Each city
+now carries a `worldSeed` (a hash of its subreddit id) that is mixed into
+both the mission layout seed and the crisis pick. Cities are unique worlds,
+while maps stay **shared within a subreddit**: everyone in one city runs the
+same layout on the same day, which is what makes comment-thread route
+strategy (§10) work.
+
+### City traits
+
+Each cycle deterministically draws a **starting trait** from a data-driven
+table in `balance.ts` — *Standard, Frozen, Crowded, Militarized, Sick*. A
+trait is a bundle of start-value modifiers plus ongoing multipliers, applied
+through exactly the same machinery as laws — no special-case code paths. The
+draw is keyed on `(worldSeed, cycle)`, so a fallen city's next cycle plays
+differently from its last, and differently from its neighbors'. `worldSeed 0`
+is the neutral/test path and always draws *Standard*, keeping tests and the
+local dev loop deterministic.
+
+### Structural pattern (industry reference)
+
+The shape here mirrors the well-known Supercell free-to-play architecture,
+one line per pattern:
+
+| Supercell pattern | One More Dawn |
+| --- | --- |
+| Instanced persistent world per community (a Clash of Clans village) | One installation = one per-subreddit city (§11) |
+| Server-authoritative simulation with a thin rendering client | All state transitions in server/shared logic; the client only renders and reports |
+| Content and balance in data tables, not code (config-driven design) | `balance.ts`, `crises.ts`, laws, routes, titles, traits |
+| Scenario variety via seeded/configured world differences (Boom Beach archipelago) | `worldSeed` + city traits |
+
+### Post-MVP: config-driven live-ops
+
+Because every knob already lives in balance tables, live-ops events become
+balance-table rotations rather than code changes: scheduled **crisis weeks**
+(weight one crisis family up), **double-loot weekends** (a loot multiplier
+entry), and global **"which city survives longest" seasons** scored via
+`redis.global` (§11). The deploy story is "ship a new table" — which is the
+point of keeping variety data-driven.

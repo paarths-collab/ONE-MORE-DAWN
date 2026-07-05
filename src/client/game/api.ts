@@ -1,5 +1,5 @@
 import type {
-  ActionResponse, ActionType, ApiError, InitResponse, LeaderboardResponse,
+  ActionResponse, ActionType, ApiError, CityTraitId, InitResponse, LeaderboardResponse,
   MissionCompleteRequest, MissionCompleteResponse, MissionRoute, MissionStartResponse,
   Role, RoleResponse, StrategyPlanId, StrategyResponse, TimelineResponse, VoteResponse,
 } from '../../shared/types';
@@ -28,7 +28,7 @@ const mockInit: InitResponse = {
   type: 'init',
   postId: 't3_mock',
   city: {
-    day: 5, cycle: 1, status: 'alive',
+    day: 5, cycle: 1, status: 'alive', worldSeed: 0, trait: 'frozen',
     population: 143, food: 22, power: 31, medicine: 7,
     morale: 44, threat: 68, defense: 35,
     crisisId: 'refugee_convoy', activeLaw: null, lawExpiresDay: 0,
@@ -78,6 +78,11 @@ const mockInit: InitResponse = {
   yourFaction: null,
   yourFactionRep: 0,
   forecast: { food: 8, power: 24, medicine: 5, morale: 38, threat: 76, raidLikely: false },
+  trait: {
+    id: 'frozen',
+    label: 'Frozen Start',
+    blurb: 'Power decays 50% faster; food keeps 15% longer.',
+  } satisfies { id: CityTraitId; label: string; blurb: string },
 };
 
 // ---------- public api ----------

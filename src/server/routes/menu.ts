@@ -5,7 +5,7 @@ import { createPost } from '../core/post';
 import { newCityState, resolveDay, type DayInputs } from '../game/resolver';
 import { utcDateString } from '../game/lazyResolve';
 import { KEYS } from '../storage/redisKeys';
-import { getStore, redisLike } from './api';
+import { deriveWorldSeed, getStore, redisLike } from './api';
 
 export const menu = new Hono();
 
@@ -83,7 +83,7 @@ menu.post('/reset', async (c) => {
     await redisLike.del(...keysToDelete.slice(i, i + 100));
   }
 
-  await store.setCityState(newCityState(cycle));
+  await store.setCityState(newCityState(cycle, deriveWorldSeed()));
   await store.setCityMeta({
     lastResolvedDate: utcDateString(new Date()),
     schemaVersion: '1',
@@ -104,6 +104,8 @@ menu.post('/seed-demo', async (c) => {
     day: 5,
     cycle,
     status: 'alive',
+    worldSeed: deriveWorldSeed(),
+    trait: 'standard', // demo state is hand-built; keep it modifier-free
     population: 143,
     food: 22,
     power: 31,

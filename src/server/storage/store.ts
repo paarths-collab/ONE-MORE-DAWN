@@ -32,7 +32,12 @@ export class Store {
   // ----- city -----
   async getCityState(): Promise<CityState | undefined> {
     const raw = await this.redis.get(KEYS.cityState);
-    return raw ? (JSON.parse(raw) as CityState) : undefined;
+    if (!raw) return undefined;
+    // Backfill fields added after launch (same pattern as the player roleRep
+    // backfill below): pre-W1 cities lack worldSeed/trait — default to the
+    // neutral world so every read path sees the full shape.
+    const parsed = JSON.parse(raw) as CityState;
+    return { ...parsed, worldSeed: parsed.worldSeed ?? 0, trait: parsed.trait ?? 'standard' };
   }
 
   async setCityState(city: CityState): Promise<void> {
