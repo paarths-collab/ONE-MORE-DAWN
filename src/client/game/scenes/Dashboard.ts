@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
-import type { DawnReport, InitResponse } from '../../../shared/types';
+import { BALANCE } from '../../../shared/balance';
+import type { DawnReport, InitResponse, MissionRoute } from '../../../shared/types';
 import { api } from '../api';
 import {
   bodyText,
@@ -280,7 +281,7 @@ export class Dashboard extends Phaser.Scene {
       W / 2 + 165,
       920,
       data.missionUsedToday ? 'Expedition done' : 'Expedition',
-      () => this.startMission(),
+      () => this.showRoutePicker(),
       {
         width: 310,
         disabled: data.missionUsedToday || energyLeft <= 0,
@@ -431,9 +432,108 @@ export class Dashboard extends Phaser.Scene {
     overlay.add(btn);
   }
 
-  private startMission() {
+  /**
+   * Route chooser modal (S4) — same pattern as the dawn report: one container,
+   * interactive shade that blocks the dashboard, destroyed on pick/cancel.
+   * Only reachable through an enabled Expedition button, so the existing
+   * missionUsedToday / no-energy gating still applies.
+   */
+  private showRoutePicker() {
+    const routes = BALANCE.mission.routes;
+    const overlay = this.add.container(0, 0).setDepth(600);
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.85).setInteractive();
+    overlay.add(shade);
+
+    const options: { route: MissionRoute; title: string; desc: string }[] = [
+      {
+        route: 'safe',
+        title: 'Safe Route',
+        desc: `${routes.safe.crates} crates · sparse hazards · low reward`,
+      },
+      {
+        route: 'deep',
+        title: 'Deep Route',
+        desc: `${routes.deep.crates} crates · the standard run`,
+      },
+      {
+        route: 'desperate',
+        title: 'Desperate Route',
+        desc: `${routes.desperate.crates} crates · dense hazards · deep crates carry +${routes.desperate.extraDeepItems} loot`,
+      },
+    ];
+
+    const btnW = 620;
+    const btnH = 92;
+    const gap = 24;
+    const panelTop = 400;
+    const headingY = panelTop + 44;
+    const firstBtnCenterY = headingY + 60 + btnH / 2;
+
+    overlay.add(
+      this.add
+        .text(W / 2, headingY, 'CHOOSE YOUR ROUTE', {
+          fontFamily: FONT,
+          fontSize: '30px',
+          color: COLORS.text,
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5, 0),
+    );
+
+    options.forEach((opt, i) => {
+      const cy = firstBtnCenterY + i * (btnH + gap);
+      const rect = this.add
+        .rectangle(0, 0, btnW, btnH, 0x2a2e33, 1)
+        .setStrokeStyle(2, COLORS.panelLine);
+      const title = this.add.text(-btnW / 2 + 20, -btnH / 2 + 14, opt.title, {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: COLORS.accentText,
+        fontStyle: 'bold',
+      });
+      const desc = this.add.text(-btnW / 2 + 20, -btnH / 2 + 48, opt.desc, {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: COLORS.dim,
+        wordWrap: { width: btnW - 40 },
+      });
+      rect.setInteractive({ useHandCursor: true });
+      rect.on('pointerdown', () => rect.setScale(0.97));
+      rect.on('pointerout', () => rect.setScale(1));
+      rect.on('pointerup', () => {
+        rect.setScale(1);
+        overlay.destroy();
+        this.startMission(opt.route);
+      });
+      overlay.add(this.add.container(W / 2, cy, [rect, title, desc]));
+    });
+
+    const cancelY = firstBtnCenterY + options.length * (btnH + gap) + 20;
+    const cancel = button(this, W / 2, cancelY, 'Cancel', () => overlay.destroy(), {
+      width: 320,
+      height: 56,
+      color: 0x2a2e33,
+    });
+    overlay.add(cancel);
+
+    // frame behind the content, in front of the shade
+    const panelBottom = cancelY + 60;
+    const frame = this.add
+      .rectangle(
+        W / 2,
+        (panelTop + panelBottom) / 2,
+        W - 60,
+        panelBottom - panelTop,
+        COLORS.panel,
+        1,
+      )
+      .setStrokeStyle(2, COLORS.panelLine);
+    overlay.addAt(frame, 1); // index 0 is the shade
+  }
+
+  private startMission(route: MissionRoute) {
     api
-      .missionStart()
+      .missionStart(route)
       .then((start) => this.scene.start('Mission', { start, threat: this.data_!.city.threat }))
       .catch((err: Error) => toastText(this, err.message));
   }

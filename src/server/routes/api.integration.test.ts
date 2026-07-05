@@ -253,4 +253,67 @@ describe('conflict layer', () => {
     expect(reloaded?.faction).toBe('seekers');
     expect(reloaded?.factionRep).toBe(BALANCE.factionRepPerMissionRun * 2);
   });
+
+  it('Scenario D: desperate route allows (and pays for) a 9-crate haul deep would reject', () => {
+    const city = newCityState(1);
+    const layoutSeed = hashString(`cycle${city.cycle}-day${city.day}`);
+    const lootSeed = hashString(`${layoutSeed}-t2_eve`);
+    const startedAt = 1_000_000;
+    const desperateToken: MissionToken = {
+      tokenId: `t2_eve-${city.day}-${startedAt}`,
+      userId: 't2_eve',
+      day: city.day,
+      layoutSeed,
+      lootSeed,
+      route: 'desperate',
+      roleAtStart: 'scout',
+      startedAtServerMs: startedAt,
+      expiresAtServerMs: startedAt + BALANCE.mission.tokenTtlMs,
+      consumed: false,
+    };
+
+    // The desperate map carries the route's crate count — more than deep's cap.
+    const map = generateMap(layoutSeed, city.threat, 'desperate');
+    expect(map.crates.length).toBe(BALANCE.mission.routes.desperate.crates); // 9
+    expect(map.crates.length).toBeGreaterThan(BALANCE.mission.routes.deep.crates);
+
+    // Claim ALL crates with a generous honest duration (80s of a 105s scout run).
+    const allCrateIds = map.crates.map((c) => c.id);
+    const durationMs = 80_000;
+    const request = {
+      tokenId: desperateToken.tokenId,
+      status: 'escaped' as const,
+      collectedCrateIds: allCrateIds,
+      clientDurationMs: durationMs,
+    };
+    const result = evaluateMission(
+      desperateToken,
+      request,
+      't2_eve',
+      city.day,
+      city.threat,
+      startedAt + durationMs,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('impossible');
+    const bankedItems =
+      (result.banked.food ?? 0) + (result.banked.medicine ?? 0) + (result.banked.scrap ?? 0);
+    // 9 crates × at least 1 item each.
+    expect(bankedItems).toBeGreaterThanOrEqual(map.crates.length);
+
+    // The IDENTICAL 9-crate claim on a deep-route token is rejected: deep maps
+    // cap at 7 crates, so the claim count alone is impossible.
+    const deepToken: MissionToken = { ...desperateToken, route: 'deep' };
+    const deepResult = evaluateMission(
+      deepToken,
+      request,
+      't2_eve',
+      city.day,
+      city.threat,
+      startedAt + durationMs,
+    );
+    expect(deepResult.ok).toBe(false);
+    if (deepResult.ok) throw new Error('impossible');
+    expect(deepResult.reason).toBe('Too many crates claimed.');
+  });
 });

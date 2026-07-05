@@ -120,7 +120,7 @@ export const api = {
         })
       : request<StrategyResponse>('/api/strategy', { planId }),
 
-  missionStart: (): Promise<MissionStartResponse> =>
+  missionStart: (route: MissionRoute): Promise<MissionStartResponse> =>
     MOCK
       ? Promise.resolve({
           type: 'mission-start',
@@ -128,11 +128,11 @@ export const api = {
           layoutSeed: 4242,
           lootSeed: 999,
           airSeconds: 105,
-          route: 'deep' satisfies MissionRoute,
+          route,
           player: mockInit.player,
           effectiveEnergy: 2,
         })
-      : request<MissionStartResponse>('/api/mission/start'),
+      : request<MissionStartResponse>('/api/mission/start', { route }),
 
   missionComplete: (body: MissionCompleteRequest): Promise<MissionCompleteResponse> =>
     MOCK

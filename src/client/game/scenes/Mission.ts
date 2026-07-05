@@ -79,8 +79,10 @@ export class Mission extends Phaser.Scene {
   create(data: { start: MissionStartResponse; threat: number }) {
     this.start_ = data.start;
     this.threat_ = data.threat;
-    this.map_ = generateMap(this.start_.layoutSeed, this.threat_);
-    this.contents_ = rollCrateContents(this.map_, this.start_.lootSeed);
+    // Route must match the server token — it regenerates with token.route,
+    // so a mismatch would produce crate ids that fail validation.
+    this.map_ = generateMap(this.start_.layoutSeed, this.threat_, this.start_.route);
+    this.contents_ = rollCrateContents(this.map_, this.start_.lootSeed, this.start_.route);
     this.pos_ = { x: this.map_.spawn.x, y: this.map_.spawn.y };
     this.collected_.clear();
     this.crateRects_.clear();
@@ -108,8 +110,10 @@ export class Mission extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5, 0);
+    const routeName =
+      this.start_.route.charAt(0).toUpperCase() + this.start_.route.slice(1);
     this.add
-      .text(W / 2, 66, 'Grab what you can. Reach the exit before your air runs out.', {
+      .text(W / 2, 66, `${routeName} route — grab what you can. Reach the exit before your air runs out.`, {
         fontFamily: FONT,
         fontSize: '16px',
         color: COLORS.dim,
