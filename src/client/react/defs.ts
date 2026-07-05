@@ -33,6 +33,9 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
   speaker: { icon: '📣', name: 'Speaker', bonus: 'Every action also lifts morale' },
 };
 
+/** The village building each city action tends (mini glyph on action cards). */
+export type BuildingId = 'farm' | 'generator' | 'clinic' | 'watchtower';
+
 export type ActionDef = {
   id: ActionType;
   icon: string;
@@ -40,6 +43,8 @@ export type ActionDef = {
   effect: string;
   role: Role;
   toast: string;
+  building: BuildingId;
+  buildingName: string;
 };
 
 export const ACTION_DEFS: readonly ActionDef[] = [
@@ -50,6 +55,8 @@ export const ACTION_DEFS: readonly ActionDef[] = [
     effect: '+3 🍞',
     role: 'farmer',
     toast: '🍞 Food grown — the greenhouse holds',
+    building: 'farm',
+    buildingName: 'FARM',
   },
   {
     id: 'repair_power',
@@ -58,6 +65,8 @@ export const ACTION_DEFS: readonly ActionDef[] = [
     effect: '+4 ⚡',
     role: 'engineer',
     toast: '⚡ Generator steadied',
+    building: 'generator',
+    buildingName: 'GENERATOR',
   },
   {
     id: 'treat_sick',
@@ -66,6 +75,8 @@ export const ACTION_DEFS: readonly ActionDef[] = [
     effect: '+2 🩹',
     role: 'medic',
     toast: '🩹 The sick rest easier',
+    building: 'clinic',
+    buildingName: 'CLINIC',
   },
   {
     id: 'guard_wall',
@@ -74,6 +85,8 @@ export const ACTION_DEFS: readonly ActionDef[] = [
     effect: '−5 ☠️ +2 🛡️',
     role: 'guard',
     toast: '🛡️ The wall holds',
+    building: 'watchtower',
+    buildingName: 'WATCHTOWER',
   },
 ];
 
@@ -157,5 +170,18 @@ export const formatDelta = (delta: ResourceDelta): string => {
 /** Stable hex color string for a villager's numeric color. */
 export const villagerColor = (color: number): string =>
   `#${color.toString(16).padStart(6, '0')}`;
+
+/** Deterministic hair tone for a villager avatar, derived from their color. */
+const HAIR_TONES: readonly string[] = [
+  '#3a2c22',
+  '#6b4a2e',
+  '#22303a',
+  '#5a3a2a',
+  '#2c2c2c',
+  '#7a5230',
+];
+
+export const villagerHair = (color: number): string =>
+  HAIR_TONES[Math.abs(color) % HAIR_TONES.length] ?? '#3a2c22';
 
 export const MEDALS: readonly string[] = ['🥇', '🥈', '🥉'];

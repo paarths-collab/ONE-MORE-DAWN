@@ -337,6 +337,474 @@
   color: var(--muted);
 }
 
+/* ==========================================================================
+   CITY SCENE — living skyline hero strip (panels/CityScene.tsx).
+   Pure CSS + emoji, theme-aware, state-reactive (power/threat/raid/morale).
+   ========================================================================== */
+@keyframes omdRing {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+@keyframes omdSmoke {
+  0% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(-16px) scale(1.25);
+    opacity: 0;
+  }
+}
+@keyframes omdSceneShake {
+  0%,
+  90%,
+  100% {
+    transform: translateX(0);
+  }
+  92% {
+    transform: translateX(-2px);
+  }
+  94% {
+    transform: translateX(2px);
+  }
+  96% {
+    transform: translateX(-1px);
+  }
+  98% {
+    transform: translateX(1px);
+  }
+}
+@keyframes omdGlowPulse {
+  0%,
+  100% {
+    opacity: 0.05;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.omd-scene {
+  position: relative;
+  height: clamp(112px, 22vw, 180px);
+  border: 1.5px solid var(--line);
+  border-radius: var(--round);
+  box-shadow: 0 3px 0 var(--line), 0 5px 8px var(--sh);
+  overflow: hidden;
+  animation: omdRise 0.28s ease;
+}
+.omd-scene-world {
+  position: absolute;
+  inset: 0;
+  transition: filter 0.6s;
+}
+.omd-scene--raid .omd-scene-world {
+  animation: omdSceneShake 2.6s ease-in-out infinite;
+}
+.omd-scene-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 20% 82%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--panel2) 0%, var(--wa) 55%, var(--wb) 100%);
+}
+.omd-scene-sun {
+  position: absolute;
+  left: 15%;
+  bottom: 22%;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--warn) 80%, #fff) 0 28%,
+    color-mix(in srgb, var(--warn) 50%, transparent) 55%,
+    transparent 72%
+  );
+  transition: opacity 0.6s;
+}
+.omd-scene--lowpower .omd-scene-sun {
+  opacity: 0.35;
+}
+
+/* skyline rows: flex of box-buildings anchored to the ground line */
+.omd-scene-row {
+  position: absolute;
+  left: -1%;
+  right: -1%;
+  top: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(3px, 0.9vw, 9px);
+}
+.omd-scene-row--back {
+  bottom: 16px;
+  z-index: 1;
+  opacity: 0.5;
+  padding: 0 6%;
+}
+.omd-scene-row--front {
+  bottom: 8px;
+  z-index: 2;
+}
+.omd-scene-bld {
+  position: relative;
+  flex-basis: 0;
+  border-radius: 3px 3px 0 0;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.08);
+}
+.omd-scene-row--back .omd-scene-bld {
+  background: color-mix(in srgb, var(--ink) 26%, var(--wb));
+}
+.omd-scene-bld--b {
+  background: color-mix(in srgb, var(--ink) 46%, var(--wb));
+}
+.omd-scene-bld--c {
+  background: color-mix(in srgb, var(--ink) 62%, var(--wb));
+}
+.omd-scene-bld--antenna::before {
+  content: '';
+  position: absolute;
+  top: -11px;
+  left: 20%;
+  width: 2px;
+  height: 11px;
+  background: color-mix(in srgb, var(--ink) 62%, var(--wb));
+}
+.omd-scene-bld--chimney::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 14%;
+  width: 6px;
+  height: 7px;
+  border-radius: 1px 1px 0 0;
+  background: inherit;
+}
+/* lit windows: a dot-grid of warm lights that goes dark when power fails */
+.omd-scene-win {
+  position: absolute;
+  inset: 6px 5px 4px;
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--warn) 75%, #ffe6b0) 1.3px,
+    transparent 1.6px
+  );
+  background-size: 8px 10px;
+  background-position: 2px 3px;
+  opacity: 0.9;
+  transition: opacity 0.7s;
+}
+.omd-scene--lowpower .omd-scene-win {
+  opacity: 0.1;
+}
+/* chimney smoke — three staggered puffs rising from the roofline */
+.omd-scene-smokes {
+  position: absolute;
+  top: -12px;
+  left: 10%;
+  width: 14px;
+  height: 10px;
+  pointer-events: none;
+}
+.omd-scene-smoke {
+  position: absolute;
+  left: 2px;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  animation: omdSmoke 3.2s ease-out infinite;
+}
+.omd-scene-smoke--2 {
+  left: 5px;
+  width: 5px;
+  height: 5px;
+  animation-delay: 1.1s;
+}
+.omd-scene-smoke--3 {
+  left: 0;
+  width: 4px;
+  height: 4px;
+  animation-delay: 2.2s;
+}
+
+.omd-scene-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  z-index: 3;
+  background: color-mix(in srgb, var(--ink) 28%, var(--wb));
+  border-top: 2px solid color-mix(in srgb, var(--ink) 42%, var(--wb));
+}
+.omd-scene-tree {
+  position: absolute;
+  bottom: 8px;
+  z-index: 3;
+  font-size: 17px;
+  line-height: 1;
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+
+/* state overlays */
+.omd-scene-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.omd-scene-threat {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(
+    75% 60% at 84% 88%,
+    color-mix(in srgb, var(--danger) 58%, transparent),
+    transparent 72%
+  );
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+.omd-scene-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--ink) 26%, transparent);
+}
+.omd-scene-alarmflash {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+  animation: omdGlowPulse 1.4s ease-in-out infinite;
+}
+
+/* survivor pin — "you are here", ring-pulse from the design */
+.omd-scene-pin {
+  position: absolute;
+  left: 58%;
+  bottom: 26%;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+}
+.omd-scene-pin-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: omdRing 1.8s ease-out infinite;
+}
+.omd-scene-pin-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  font-size: 15px;
+  box-shadow: 0 4px 10px var(--sh);
+}
+.omd-scene--alarm .omd-scene-pin-ring {
+  border-color: var(--danger);
+  animation-duration: 0.9s;
+}
+.omd-scene--alarm .omd-scene-pin-face {
+  border-color: var(--danger);
+}
+
+/* caption + mood line, readable over the scene */
+.omd-scene-caption {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 10px;
+  backdrop-filter: blur(2px);
+}
+.omd-scene-caption-title {
+  font: 700 11px var(--font-display);
+  letter-spacing: 1px;
+  color: var(--ink);
+}
+.omd-scene-caption-sub {
+  font: 700 8.5px var(--font-mono);
+  color: var(--muted);
+  letter-spacing: 0.4px;
+}
+.omd-scene-mood {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 6;
+  font: 700 8px var(--font-mono);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.85;
+  background: color-mix(in srgb, var(--panel) 65%, transparent);
+  border-radius: 8px;
+  padding: 3px 7px;
+}
+.omd-scene-mood--danger {
+  color: var(--danger);
+  opacity: 1;
+}
+@media (max-width: 480px) {
+  .omd-scene-mood {
+    display: none;
+  }
+}
+
+/* ---------- mini building glyphs (action cards) ---------- */
+.omd-bhouse {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  align-self: flex-start;
+  flex: none;
+}
+.omd-bhouse-fig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 28px;
+}
+.omd-bhouse-roof {
+  width: 0;
+  height: 0;
+  border-left: 13px solid transparent;
+  border-right: 13px solid transparent;
+  border-bottom: 9px solid var(--accentb);
+  margin-bottom: -1px;
+}
+.omd-bhouse-body {
+  position: relative;
+  width: 22px;
+  height: 12px;
+  background: var(--panel2);
+  border: 2px solid var(--ink);
+  border-radius: 0 0 3px 3px;
+}
+.omd-bhouse-win {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--warn);
+  box-shadow: 7px 0 0 var(--warn);
+}
+.omd-bhouse-tag {
+  font: 800 6.5px var(--font-mono);
+  letter-spacing: 0.7px;
+  color: var(--muted);
+}
+/* farm — wide gable, green roof, extra grain-lit window */
+.omd-bhouse--farm .omd-bhouse-roof {
+  border-bottom-color: var(--good);
+}
+.omd-bhouse--farm .omd-bhouse-body {
+  width: 26px;
+}
+.omd-bhouse--farm .omd-bhouse-win {
+  box-shadow: 7px 0 0 var(--warn), 14px 0 0 var(--warn);
+}
+/* generator — flat roof, warn stripe, smoke-stack */
+.omd-bhouse--generator .omd-bhouse-roof {
+  border: 0;
+  width: 24px;
+  height: 5px;
+  background: var(--warn);
+  border-radius: 2px 2px 0 0;
+}
+.omd-bhouse--generator .omd-bhouse-body {
+  width: 24px;
+  height: 13px;
+}
+.omd-bhouse--generator .omd-bhouse-body::after {
+  content: '';
+  position: absolute;
+  top: -11px;
+  right: 3px;
+  width: 4px;
+  height: 6px;
+  border-radius: 1px 1px 0 0;
+  background: var(--ink);
+}
+/* clinic — red roof, white face, cross */
+.omd-bhouse--clinic .omd-bhouse-roof {
+  border-bottom-color: var(--danger);
+}
+.omd-bhouse--clinic .omd-bhouse-body {
+  background: var(--pill);
+}
+.omd-bhouse--clinic .omd-bhouse-win {
+  display: none;
+}
+.omd-bhouse-cross {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  background:
+    linear-gradient(var(--danger), var(--danger)) center / 8px 3px no-repeat,
+    linear-gradient(var(--danger), var(--danger)) center / 3px 8px no-repeat;
+}
+/* watchtower — tall, narrow, accent cap, one high lookout window */
+.omd-bhouse--watchtower .omd-bhouse-roof {
+  border-left-width: 9px;
+  border-right-width: 9px;
+  border-bottom: 7px solid var(--accent);
+}
+.omd-bhouse--watchtower .omd-bhouse-body {
+  width: 14px;
+  height: 20px;
+}
+.omd-bhouse--watchtower .omd-bhouse-win {
+  left: 3px;
+  top: 3px;
+  width: 4px;
+  height: 5px;
+  box-shadow: none;
+}
+
+/* respect reduced-motion for the ambient layer */
+@media (prefers-reduced-motion: reduce) {
+  .omd-scene-world,
+  .omd-scene-pin-ring,
+  .omd-scene-smoke,
+  .omd-scene-alarmflash,
+  .omd-va-sprite {
+    animation: none !important;
+  }
+}
+
 /* ---------- panel grid ---------- */
 .omd-grid {
   display: grid;
@@ -891,49 +1359,122 @@
   margin: 6px 0 14px;
 }
 
-/* ---------- roster ---------- */
-.omd-roster {
+/* ---------- roster: villager avatar cluster ---------- */
+.omd-vgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.omd-vgrid .omd-note {
+  grid-column: 1 / -1;
+}
+.omd-vgr {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 230px;
-  overflow-y: auto;
-}
-.omd-cit {
-  display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 2px;
   background: var(--pill);
   border: 1.5px solid var(--line);
   border-radius: 12px;
-  padding: 6px 10px;
+  padding: 8px 4px 7px;
+  text-align: center;
+  min-width: 0;
 }
-.omd-cit-avatar {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border-radius: 7px;
-  border: 1.5px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
+.omd-vgr--off {
+  opacity: 0.78;
 }
-.omd-cit-name {
-  font: 800 11.5px var(--font-mono);
+.omd-vgr-name {
+  font: 800 10.5px var(--font-mono);
   color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.omd-cit-role {
-  font: 700 9.5px var(--font-body);
+.omd-vgr-role {
+  font: 700 9px var(--font-body);
   color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.omd-cit-right {
-  margin-left: auto;
-  display: flex;
+.omd-vgr-meta {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font: 700 8.5px var(--font-mono);
+  gap: 4px;
+  font: 700 8px var(--font-mono);
   color: var(--muted);
+}
+
+/* pixel-person avatar (hair cap + face + body, dark outline, gentle bob) */
+.omd-va {
+  position: relative;
+  width: 30px;
+  height: 34px;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: none;
+}
+.omd-va-sprite {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  animation: omdBob 1.4s ease-in-out infinite;
+}
+.omd-va-hair {
+  display: block;
+  width: 16px;
+  height: 9px;
+  margin: 0 auto;
+  border: 2px solid var(--ink);
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+}
+.omd-va-face {
+  display: block;
+  width: 14px;
+  height: 7px;
+  margin: 0 auto;
+  background: #d9a878;
+  border-left: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+}
+.omd-va-body {
+  display: block;
+  width: 22px;
+  height: 13px;
+  margin: -1px auto 0;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+}
+.omd-va-shadow {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sh);
+  opacity: 0.3;
+}
+.omd-va--off .omd-va-sprite {
+  animation: none;
+  filter: grayscale(0.65) opacity(0.6);
+}
+@keyframes omdBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
 }
 .omd-onlinedot {
   width: 8px;

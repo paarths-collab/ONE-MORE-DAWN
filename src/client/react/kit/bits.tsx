@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
+import type { BuildingId } from '../defs';
 
-// Small display atoms: resource pill, chip, energy dots.
+// Small display atoms: resource pill, chip, energy dots, building glyph.
 
 export type Trend = 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'flat' | 'none';
 
@@ -72,6 +73,28 @@ export function EnergyBadge({ total, filled }: EnergyBadgeProps) {
       <span className="omd-energy-label">
         ENERGY {filled}/{total}
       </span>
+    </span>
+  );
+}
+
+export type BuildingGlyphProps = { kind: BuildingId; name: string };
+
+/**
+ * Mini CSS building (roof + body + lit windows) that gives each city action a
+ * place in the village: farm, generator, clinic, watchtower. Same visual
+ * language as the CITY SCENE skyline — shapes, not sprites.
+ */
+export function BuildingGlyph({ kind, name }: BuildingGlyphProps) {
+  return (
+    <span className={`omd-bhouse omd-bhouse--${kind}`} aria-hidden="true">
+      <span className="omd-bhouse-fig">
+        <span className="omd-bhouse-roof" />
+        <span className="omd-bhouse-body">
+          <span className="omd-bhouse-win" />
+          {kind === 'clinic' && <span className="omd-bhouse-cross" />}
+        </span>
+      </span>
+      <span className="omd-bhouse-tag">{name}</span>
     </span>
   );
 }

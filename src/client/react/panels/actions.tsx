@@ -2,7 +2,7 @@ import type { InitResponse, StrategyPlanId } from '../../../shared/types';
 import { ACTION_DEFS, PLAN_DEFS, PLAN_IDS, ROLE_DEFS, ROUTE_DEFS } from '../defs';
 import type { Handlers } from '../handlers';
 import { Button } from '../kit/Button';
-import { EnergyBadge } from '../kit/bits';
+import { BuildingGlyph, EnergyBadge } from '../kit/bits';
 import { Panel } from '../kit/Panel';
 
 // CITY ACTIONS (api.takeAction) and EXPEDITION launcher (api.missionStart).
@@ -54,7 +54,7 @@ export function ActionsPanel({ data, handlers }: { data: InitResponse; handlers:
               ) : null}
               <span className="omd-action-top">
                 <span className="omd-action-icon">{a.icon}</span>
-                <span>
+                <span style={{ minWidth: 0 }}>
                   <span className="omd-action-title" style={{ display: 'block' }}>
                     {a.title}
                     {isRoleBonus ? ' ★' : ''}
@@ -64,6 +64,7 @@ export function ActionsPanel({ data, handlers }: { data: InitResponse; handlers:
                     {isRoleBonus ? ' ×1.5' : ''}
                   </span>
                 </span>
+                <BuildingGlyph kind={a.building} name={a.buildingName} />
               </span>
               <span className="omd-action-foot">
                 <span>{ROLE_DEFS[a.role].icon}</span>

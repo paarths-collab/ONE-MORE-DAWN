@@ -2,6 +2,7 @@ import type { InitResponse, VillageResponse } from '../../shared/types';
 import { api } from '../game/api';
 import type { Handlers } from './handlers';
 import { ActionsPanel, ExpeditionPanel } from './panels/actions';
+import { CityScene } from './panels/CityScene';
 import { ActivityPanel, CitizensPanel, LeaderboardPanel, useFetch } from './panels/community';
 import { FactionsPanel } from './panels/FactionsPanel';
 import { AlertStrip, TopBar } from './panels/header';
@@ -24,6 +25,7 @@ export function Dashboard({ data, handlers, onTheme, onRefresh }: DashboardProps
     <div className="omd-shell">
       <TopBar data={data} subreddit={subreddit} onTheme={onTheme} onRefresh={onRefresh} />
       <AlertStrip data={data} />
+      <CityScene data={data} />
       <div className="omd-grid">
         <VitalsPanel data={data} />
         <RolePanel data={data} handlers={handlers} />

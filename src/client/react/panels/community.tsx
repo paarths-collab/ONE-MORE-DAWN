@@ -7,8 +7,9 @@ import type {
   VillageResponse,
 } from '../../../shared/types';
 import { api } from '../../game/api';
-import { MEDALS, ROLE_DEFS, villagerColor } from '../defs';
+import { MEDALS, ROLE_DEFS, villagerColor, villagerHair } from '../defs';
 import { Panel } from '../kit/Panel';
+import { VillagerAvatar } from '../kit/VillagerAvatar';
 
 // Lazily-loaded community panels: CITIZENS (api.village), ACTIVITY
 // (api.timeline) and LEADERBOARD (api.leaderboard).
@@ -51,29 +52,29 @@ export function CitizensPanel({ village }: { village: Fetch<VillageResponse> }) 
       {village.kind === 'error' && <div className="omd-note">The census office is dark.</div>}
       {village.kind === 'ready' && (
         <>
-          <div className="omd-roster">
+          <div className="omd-vgrid">
             {village.data.villagers.length === 0 && (
               <div className="omd-note">No citizens registered yet — you are the first.</div>
             )}
             {village.data.villagers.map((v, i) => (
-              <div key={`${v.maskedName}-${i}`} className="omd-cit">
-                <span
-                  className="omd-cit-avatar"
-                  style={{ background: villagerColor(v.color) }}
-                >
-                  {v.role !== null ? ROLE_DEFS[v.role].icon : '❔'}
+              <div
+                key={`${v.maskedName}-${i}`}
+                className={v.online ? 'omd-vgr' : 'omd-vgr omd-vgr--off'}
+                title={`${v.maskedName} · ${v.role !== null ? ROLE_DEFS[v.role].name : 'undecided'} · ${v.online ? 'online' : 'away'} · ${v.since}`}
+              >
+                <VillagerAvatar
+                  body={villagerColor(v.color)}
+                  hair={villagerHair(v.color)}
+                  online={v.online}
+                  delayMs={(i % 6) * 190}
+                />
+                <span className="omd-vgr-name">{v.maskedName}</span>
+                <span className="omd-vgr-role">
+                  {v.role !== null ? `${ROLE_DEFS[v.role].icon} ${ROLE_DEFS[v.role].name}` : '❔ undecided'}
                 </span>
-                <span style={{ minWidth: 0 }}>
-                  <span className="omd-cit-name" style={{ display: 'block' }}>
-                    {v.maskedName}
-                  </span>
-                  <span className="omd-cit-role" style={{ display: 'block' }}>
-                    {v.role !== null ? ROLE_DEFS[v.role].name : 'undecided'} · {v.since}
-                  </span>
-                </span>
-                <span className="omd-cit-right">
-                  {v.online ? 'online' : 'away'}
+                <span className="omd-vgr-meta">
                   <span className={v.online ? 'omd-onlinedot omd-onlinedot--on' : 'omd-onlinedot'} />
+                  {v.online ? 'online' : v.since}
                 </span>
               </div>
             ))}
