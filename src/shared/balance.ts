@@ -69,6 +69,7 @@ export const BALANCE = {
     scoutAirBonusSeconds: 15,
     scoutRevealTiles: 2,
     minPlausibleDurationMs: 5000,
+    minMsPerTile: 100, // client walks at 160ms/tile; 100 leaves slack for honest runs
     completionGraceMs: 30000,
     tokenTtlMs: 10 * 60 * 1000,
     failLootKeepRatio: 0.5, // keep half, rounded down

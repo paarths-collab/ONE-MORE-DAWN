@@ -60,3 +60,12 @@ One lesson per bullet. Update rather than duplicate; delete if proven wrong.
   against `makeFakeRedis` — Hono routes are NOT exercised (they need the
   Devvit runtime). Extend this file (do not replace it) when new game flow
   ships, so the slice-alive proof keeps up.
+
+## Accepted risks (reviewed 2026-07-05)
+- Mission `status`/injury is client-attested — a dishonest client can report
+  'escaped' and avoid the injury penalty. Bounded to 1 run/day in a co-op
+  game; accepted for the hackathon. Loot AMOUNT is now bounded server-side by
+  the physical feasibility check in `evaluateMission` (minMsPerTile).
+- `/action` and `/mission/start` watch the whole `players` hash — concurrent
+  spends by DIFFERENT users can 409 (client-retriable). Accepted: that watch
+  is exactly what prevents double-spend for the same user.

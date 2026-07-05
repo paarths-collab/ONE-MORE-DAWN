@@ -1,6 +1,6 @@
 import { BALANCE } from '../../shared/balance';
 import { generateMap, rollCrateContents } from '../../shared/mapgen';
-import type { LootKind, MissionCompleteRequest, Role } from '../../shared/types';
+import type { LootKind, MissionCompleteRequest, MissionMap, Role } from '../../shared/types';
 
 export type MissionToken = {
   tokenId: string;
@@ -17,6 +17,62 @@ export type MissionToken = {
 export type MissionEvaluation =
   | { ok: true; banked: Partial<Record<LootKind, number>>; injured: boolean }
   | { ok: false; reason: string };
+
+/** BFS distances from `from` over walkable tiles (not 'wall'), 4-neighbor. */
+const distancesFrom = (
+  map: MissionMap,
+  from: { x: number; y: number },
+): Map<string, number> => {
+  const dist = new Map<string, number>([[`${from.x},${from.y}`, 0]]);
+  const queue = [from];
+  while (queue.length > 0) {
+    const { x, y } = queue.shift()!;
+    const d = dist.get(`${x},${y}`)!;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (
+        nx >= 0 &&
+        nx < map.width &&
+        ny >= 0 &&
+        ny < map.height &&
+        map.tiles[ny]![nx] !== 'wall' &&
+        !dist.has(`${nx},${ny}`)
+      ) {
+        dist.set(`${nx},${ny}`, d + 1);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+  }
+  return dist;
+};
+
+/**
+ * Physical lower bound (ms) on a run that claims `crateIds`: every claimed
+ * crate must be reached from spawn (BFS distance) and the exit reached from
+ * it (CrateSpot.depth is the BFS distance to the exit), at no faster than
+ * minMsPerTile. Sound: honest movement is 160ms/tile >= 100ms/tile, so an
+ * honest run can never be rejected. Unknown crate ids are ignored — the
+ * caller validates them separately.
+ */
+export const minFeasibleMs = (map: MissionMap, crateIds: string[]): number => {
+  const fromSpawn = distancesFrom(map, map.spawn);
+  const byId = new Map(map.crates.map((c) => [c.id, c]));
+  let bound = 0;
+  for (const id of crateIds) {
+    const crate = byId.get(id);
+    if (!crate) continue;
+    const d = fromSpawn.get(`${crate.x},${crate.y}`);
+    const tiles = d === undefined ? Number.POSITIVE_INFINITY : d + crate.depth;
+    bound = Math.max(bound, tiles * BALANCE.mission.minMsPerTile);
+  }
+  return bound;
+};
 
 /**
  * Spec §4 anti-cheat: the client sends crate IDs; the server regenerates the
@@ -36,10 +92,12 @@ export const evaluateMission = (
   if (token.day !== cityDay) return { ok: false, reason: 'This mission belongs to a day that has passed.' };
   if (nowMs > token.expiresAtServerMs) return { ok: false, reason: 'Mission expired.' };
 
-  const serverDuration = nowMs - token.startedAtServerMs;
-  if (serverDuration < BALANCE.mission.minPlausibleDurationMs) {
-    return { ok: false, reason: 'Implausible completion time.' };
+  // Cheap bound before any Set building or map generation.
+  if (request.collectedCrateIds.length > BALANCE.mission.cratesPerMap) {
+    return { ok: false, reason: 'Too many crates claimed.' };
   }
+
+  const serverDuration = nowMs - token.startedAtServerMs;
   const airMs =
     (BALANCE.mission.airSeconds +
       (token.roleAtStart === 'scout' ? BALANCE.mission.scoutAirBonusSeconds : 0)) *
@@ -57,6 +115,15 @@ export const evaluateMission = (
   const valid = new Set(map.crates.map((c) => c.id));
   for (const id of request.collectedCrateIds) {
     if (!valid.has(id)) return { ok: false, reason: `Unknown crate: ${id}` };
+  }
+
+  // Physical feasibility first (crate-specific, more informative), then the
+  // blanket plausibility floor. Same accept/reject set in either order.
+  if (serverDuration < minFeasibleMs(map, request.collectedCrateIds)) {
+    return { ok: false, reason: 'Claimed loot is not physically reachable in that time.' };
+  }
+  if (serverDuration < BALANCE.mission.minPlausibleDurationMs) {
+    return { ok: false, reason: 'Implausible completion time.' };
   }
 
   const contents = rollCrateContents(map, token.lootSeed);

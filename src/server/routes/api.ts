@@ -70,6 +70,7 @@ export const redisLike: RedisLike = {
   },
   zIncrBy: (key, member, value) => redis.zIncrBy(key, member, value),
   zAdd: (key, ...members) => redis.zAdd(key, ...members),
+  zScore: (key, member) => redis.zScore(key, member),
   zRange: (key, start, stop, options) =>
     redis.zRange(
       key,
@@ -80,6 +81,17 @@ export const redisLike: RedisLike = {
 };
 
 export const getStore = () => new Store(redisLike);
+
+/** Malformed JSON must be a 400 at the route, never an unhandled 500. */
+export const parseBody = async <T>(c: {
+  req: { json(): Promise<unknown> };
+}): Promise<T | undefined> => {
+  try {
+    return (await c.req.json()) as T;
+  } catch {
+    return undefined;
+  }
+};
 
 export const requireUser = (): { userId: string } | undefined => {
   const { userId } = context;
@@ -99,8 +111,12 @@ api.get('/init', async (c) => {
   const store = getStore();
   const { city, resolving } = await runLazyResolution(store, redisLike, new Date());
 
-  const username = (await reddit.getCurrentUsername()) ?? 'citizen';
-  let player = (await store.getPlayer(user.userId)) ?? freshPlayer(user.userId, username, city.day);
+  // Only fresh players pay the Reddit username RPC — existing profiles skip it.
+  let player = await store.getPlayer(user.userId);
+  if (!player) {
+    const username = (await reddit.getCurrentUsername()) ?? 'citizen';
+    player = freshPlayer(user.userId, username, city.day);
+  }
   const reset = resetPlayerForDay(player, city.day);
   if (reset !== player) {
     player = reset;
@@ -164,7 +180,10 @@ api.post('/role', async (c) => {
   const city = await store.getCityState();
   if (!city) return c.json<ApiError>({ status: 'error', message: 'City not initialized' }, 409);
 
-  const body = await c.req.json<RoleRequest>();
+  const body = await parseBody<RoleRequest>(c);
+  if (!body || typeof body.role !== 'string') {
+    return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
+  }
   const player = await store.getPlayer(user.userId);
   if (!player) return c.json<ApiError>({ status: 'error', message: 'Open the game first' }, 409);
 
@@ -185,7 +204,10 @@ api.post('/action', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'The city is beyond saving.' }, 409);
   }
 
-  const body = await c.req.json<ActionRequest>();
+  const body = await parseBody<ActionRequest>(c);
+  if (!body || typeof body.action !== 'string') {
+    return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
+  }
 
   // Optimistic-concurrency energy spend: watch players; conflict → retry.
   const tx = await redis.watch(KEYS.players);
@@ -211,16 +233,22 @@ api.post('/action', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'Busy — try again' }, 409);
   }
 
-  // Non-critical bookkeeping outside the tx (contribution mirror + aggregates).
-  await store.recordAction(city.day, user.userId, body.action);
-  await store.addContribution(user.userId, BALANCE.contributionPerAction);
-
-  // Faction bookkeeping (also outside the tx): the acting player's chosen action
-  // pushes influence for its faction today and earns the player rep on it.
-  let finalPlayer = updated;
+  // Non-critical bookkeeping outside the tx (contribution mirror + aggregates),
+  // in parallel — none of these read each other's writes. Faction influence
+  // rides along when the action maps to a faction.
   const faction = BALANCE.factionPerAction[body.action];
+  await Promise.all([
+    store.recordAction(city.day, user.userId, body.action),
+    store.addContribution(user.userId, BALANCE.contributionPerAction),
+    ...(faction
+      ? [store.bumpFactionInfluence(city.day, faction, BALANCE.factionRepPerAction)]
+      : []),
+  ]);
+
+  // Rep re-reads the saved player and its result is the response player —
+  // must stay after the tx write and outside the Promise.all.
+  let finalPlayer = updated;
   if (faction) {
-    await store.bumpFactionInfluence(city.day, faction, BALANCE.factionRepPerAction);
     finalPlayer =
       (await store.bumpPlayerFactionRep(city.cycle, user.userId, faction, BALANCE.factionRepPerAction)) ??
       updated;
@@ -243,7 +271,10 @@ api.post('/vote', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'The city is beyond saving.' }, 409);
   }
 
-  const body = await c.req.json<VoteRequest>();
+  const body = await parseBody<VoteRequest>(c);
+  if (!body || typeof body.optionId !== 'string') {
+    return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
+  }
   const crisis = getCrisis(city.crisisId);
   if (!crisis.options.some((o) => o.id === body.optionId)) {
     return c.json<ApiError>({ status: 'error', message: 'Unknown option' }, 400);
@@ -279,7 +310,10 @@ api.post('/strategy', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'The city is beyond saving.' }, 409);
   }
 
-  const body = await c.req.json<StrategyRequest>();
+  const body = await parseBody<StrategyRequest>(c);
+  if (!body || typeof body.planId !== 'string') {
+    return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
+  }
   if (!(BALANCE.strategyPlans as readonly string[]).includes(body.planId)) {
     return c.json<ApiError>({ status: 'error', message: 'Unknown plan' }, 400);
   }
@@ -318,25 +352,28 @@ api.get('/leaderboard', async (c) => {
     store.topScouts(10),
   ]);
 
-  // Resolve usernames from the players hash; fall back to 'citizen' if unknown.
-  const resolve = async (
-    rows: { userId: string; score: number }[],
-  ): Promise<LeaderboardEntry[]> => {
-    const out: LeaderboardEntry[] = [];
-    for (const r of rows) {
-      const p = await store.getPlayer(r.userId);
-      out.push({ userId: r.userId, username: p?.username ?? 'citizen', score: Math.round(r.score) });
-    }
-    return out;
-  };
-  const [contributors, scouts] = await Promise.all([resolve(contribRows), resolve(scoutRows)]);
+  // Resolve usernames from the players hash (in parallel); fall back to
+  // 'citizen' if unknown.
+  const resolve = (rows: { userId: string; score: number }[]): Promise<LeaderboardEntry[]> =>
+    Promise.all(
+      rows.map(async (r) => {
+        const p = await store.getPlayer(r.userId);
+        return { userId: r.userId, username: p?.username ?? 'citizen', score: Math.round(r.score) };
+      }),
+    );
 
   // Faction standings: rank today's influence tally per faction (deterministic
-  // FactionId order as tie-break), standing 1 = highest.
+  // FactionId order as tie-break), standing 1 = highest. Influence needs
+  // city.day, so read the city first, then run both username resolutions in
+  // parallel with the influence fetch.
   const city = await store.getCityState();
-  const influence = city
-    ? await store.getFactionInfluence(city.day)
-    : { builders: 0, wardens: 0, seekers: 0, hearth: 0 };
+  const [contributors, scouts, influence] = await Promise.all([
+    resolve(contribRows),
+    resolve(scoutRows),
+    city
+      ? store.getFactionInfluence(city.day)
+      : Promise.resolve<Record<FactionId, number>>({ builders: 0, wardens: 0, seekers: 0, hearth: 0 }),
+  ]);
   const order = (['builders', 'wardens', 'seekers', 'hearth'] as FactionId[])
     .map((f) => ({ f, rep: influence[f] }))
     .sort((a, b) => b.rep - a.rep);

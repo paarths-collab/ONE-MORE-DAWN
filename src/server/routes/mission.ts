@@ -11,7 +11,7 @@ import type {
 import { effectiveEnergy } from '../game/dayLogic';
 import { evaluateMission, type MissionToken } from '../game/missionRules';
 import { KEYS } from '../storage/redisKeys';
-import { getStore } from './api';
+import { getStore, parseBody } from './api';
 
 export const mission = new Hono();
 
@@ -113,9 +113,14 @@ mission.post('/complete', async (c) => {
   if (!userId) return c.json<ApiError>({ status: 'error', message: 'Not logged in' }, 401);
   const store = getStore();
   const city = await store.getCityState();
-  if (!city) return c.json<ApiError>({ status: 'error', message: 'City not initialized' }, 409);
+  if (!city || city.status !== 'alive') {
+    return c.json<ApiError>({ status: 'error', message: 'The city is beyond saving.' }, 409);
+  }
 
-  const body = await c.req.json<MissionCompleteRequest>();
+  const body = await parseBody<MissionCompleteRequest>(c);
+  if (!body || typeof body.tokenId !== 'string' || !Array.isArray(body.collectedCrateIds)) {
+    return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
+  }
   const tokenKey = KEYS.missionToken(body.tokenId);
 
   // Atomic consume: watch the token key so a parallel duplicate /complete
@@ -143,13 +148,6 @@ mission.post('/complete', async (c) => {
 
   const items =
     (result.banked.food ?? 0) + (result.banked.medicine ?? 0) + (result.banked.scrap ?? 0);
-  await store.bumpDayMissions(city.day, {
-    totalRuns: 1,
-    totalFood: result.banked.food ?? 0,
-    totalMedicine: result.banked.medicine ?? 0,
-    totalScrap: result.banked.scrap ?? 0,
-    injuries: result.injured ? 1 : 0,
-  });
 
   const player = await store.getPlayer(userId);
   if (!player) return c.json<ApiError>({ status: 'error', message: 'Profile lost' }, 500);
@@ -160,15 +158,28 @@ mission.post('/complete', async (c) => {
     injuredUntilDay: result.injured ? city.day + BALANCE.mission.injuryDays : player.injuredUntilDay,
   };
   await store.savePlayer(updated);
-  await store.addContribution(userId, contribution);
-  await store.recordScoutHaul(userId, items);
 
-  // Every completed expedition run pushes Seekers influence + player rep.
-  await store.bumpFactionInfluence(
-    city.day,
-    BALANCE.factionPerMissionRun,
-    BALANCE.factionRepPerMissionRun,
-  );
+  // Independent bookkeeping in parallel: day aggregates, contribution mirror,
+  // scout leaderboard, and Seekers influence (every run pushes it).
+  await Promise.all([
+    store.bumpDayMissions(city.day, {
+      totalRuns: 1,
+      totalFood: result.banked.food ?? 0,
+      totalMedicine: result.banked.medicine ?? 0,
+      totalScrap: result.banked.scrap ?? 0,
+      injuries: result.injured ? 1 : 0,
+    }),
+    store.addContribution(userId, contribution),
+    store.recordScoutHaul(userId, items),
+    store.bumpFactionInfluence(
+      city.day,
+      BALANCE.factionPerMissionRun,
+      BALANCE.factionRepPerMissionRun,
+    ),
+  ]);
+
+  // Rep re-reads the saved player and its result is the response player —
+  // must stay after savePlayer and outside the Promise.all.
   const repd = await store.bumpPlayerFactionRep(
     city.cycle,
     userId,

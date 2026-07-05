@@ -16,6 +16,7 @@ export type RedisLike = {
   hDel(key: string, fields: string[]): Promise<void>;
   zIncrBy(key: string, member: string, value: number): Promise<number>;
   zAdd(key: string, ...members: { member: string; score: number }[]): Promise<number>;
+  zScore(key: string, member: string): Promise<number | undefined>;
   zRange(
     key: string, start: number | string, stop: number | string,
     options?: { reverse?: boolean; by?: 'rank' | 'score' | 'lex' },
@@ -162,9 +163,11 @@ export class Store {
 
   // ----- missions -----
   async bumpDayMissions(day: number, fields: Record<string, number>): Promise<void> {
-    for (const [field, by] of Object.entries(fields)) {
-      if (by !== 0) await this.redis.hIncrBy(KEYS.dayMissions(day), field, by);
-    }
+    await Promise.all(
+      Object.entries(fields)
+        .filter(([, by]) => by !== 0)
+        .map(([field, by]) => this.redis.hIncrBy(KEYS.dayMissions(day), field, by)),
+    );
   }
 
   async getDayMissions(day: number): Promise<Record<string, number>> {
@@ -177,9 +180,8 @@ export class Store {
   }
 
   async recordScoutHaul(userId: string, haul: number): Promise<void> {
-    const existing = await this.redis.zRange(KEYS.lbScouts, 0, -1);
-    const mine = existing.find((e) => e.member === userId);
-    if (!mine || haul > mine.score) {
+    const current = await this.redis.zScore(KEYS.lbScouts, userId);
+    if (current === undefined || haul > current) {
       await this.redis.zAdd(KEYS.lbScouts, { member: userId, score: haul });
     }
   }

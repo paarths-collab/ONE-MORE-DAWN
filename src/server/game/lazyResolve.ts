@@ -1,4 +1,4 @@
-import type { CityState, Role } from '../../shared/types';
+import type { ActionType, CityState, Role } from '../../shared/types';
 import { KEYS } from '../storage/redisKeys';
 import type { RedisLike } from '../storage/store';
 import { Store } from '../storage/store';
@@ -57,14 +57,23 @@ export const runLazyResolution = async (
       return { city, resolving: false };
     }
 
+    // One hGetAll for userActions (roleCounts needs it), then the independent
+    // day inputs in parallel.
     const userActions = await store.getAllUserActions(city.day);
+    const [actions, missions, crisisVotes, factionInfluence, roleCounts] = await Promise.all([
+      store.getDayActions(city.day),
+      store.getDayMissions(city.day),
+      store.getVoteTally(city.day),
+      store.getFactionInfluence(city.day),
+      countActionsByRole(store, userActions),
+    ]);
     const inputs: DayInputs = {
-      actions: await store.getDayActions(city.day),
-      missions: await store.getDayMissions(city.day),
-      crisisVotes: await store.getVoteTally(city.day),
-      roleCounts: await countActionsByRole(store, city.day),
+      actions,
+      missions,
+      crisisVotes,
+      roleCounts,
       activeUserCount: Object.keys(userActions).length,
-      factionInfluence: await store.getFactionInfluence(city.day),
+      factionInfluence,
     };
     const { city: nextCity, entry } = resolveDay(city, inputs);
 
@@ -79,20 +88,21 @@ export const runLazyResolution = async (
 };
 
 /**
- * Slice version: only speakers matter (morale tick). Bounded: one hGetAll of
- * today's userActions, then per-user profile reads.
+ * Slice version: only speakers matter (morale tick). Takes the already-fetched
+ * userActions map (no duplicate hGetAll) and reads profiles in parallel.
  */
 const countActionsByRole = async (
   store: Store,
-  day: number,
+  userActions: Record<string, Partial<Record<ActionType, number>>>,
 ): Promise<Partial<Record<Role, number>>> => {
   const counts: Partial<Record<Role, number>> = {};
-  const userActions = await store.getAllUserActions(day);
-  for (const userId of Object.keys(userActions)) {
-    const player = await store.getPlayer(userId);
-    if (!player?.role) continue;
+  const userIds = Object.keys(userActions);
+  const players = await Promise.all(userIds.map((userId) => store.getPlayer(userId)));
+  userIds.forEach((userId, i) => {
+    const player = players[i];
+    if (!player?.role) return;
     const acted = Object.values(userActions[userId] ?? {}).reduce((s, n) => s + (n ?? 0), 0);
     counts[player.role] = (counts[player.role] ?? 0) + acted;
-  }
+  });
   return counts;
 };

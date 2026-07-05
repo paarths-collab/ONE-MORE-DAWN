@@ -76,7 +76,11 @@ menu.post('/reset', async (c) => {
       KEYS.dayStrategyVoters(d),
     );
   }
-  await redisLike.del(...keysToDelete);
+  // Long cycles build a big key list — delete in bounded batches so a single
+  // del never carries hundreds of keys.
+  for (let i = 0; i < keysToDelete.length; i += 100) {
+    await redisLike.del(...keysToDelete.slice(i, i + 100));
+  }
 
   await store.setCityState(newCityState(cycle));
   await store.setCityMeta({

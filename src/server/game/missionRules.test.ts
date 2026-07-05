@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateMission, type MissionToken } from './missionRules';
+import { evaluateMission, minFeasibleMs, type MissionToken } from './missionRules';
 import { generateMap, rollCrateContents } from '../../shared/mapgen';
 import { BALANCE } from '../../shared/balance';
+import type { MissionMap } from '../../shared/types';
 
 const NOW = 1_800_000_000_000;
 
@@ -88,5 +89,67 @@ describe('evaluateMission', () => {
   it('rejects duplicate crate ids', () => {
     const dup = [validCrates[0]!, validCrates[0]!];
     expect(evaluateMission(token, { ...request, collectedCrateIds: dup }, 't2_a', 5, 30, NOW).ok).toBe(false);
+  });
+
+  it('rejects claiming more crate ids than the map holds (before map generation)', () => {
+    const ids = Array.from({ length: BALANCE.mission.cratesPerMap + 1 }, (_, i) => `c${i}`);
+    const r = evaluateMission(token, { ...request, collectedCrateIds: ids }, 't2_a', 5, 30, NOW);
+    expect(r).toEqual({ ok: false, reason: 'Too many crates claimed.' });
+  });
+
+  it('rejects loot that is not physically reachable in the elapsed time', () => {
+    const deepest = [...map.crates].sort((a, b) => b.depth - a.depth)[0]!;
+    const bound = minFeasibleMs(map, [deepest.id]);
+    expect(bound).toBeGreaterThan(0);
+    // One tile-time short of the spawn->crate->exit lower bound.
+    const fast = { ...token, startedAtServerMs: NOW - (bound - 1) };
+    const r = evaluateMission(
+      fast,
+      { ...request, collectedCrateIds: [deepest.id] },
+      't2_a',
+      5,
+      30,
+      NOW,
+    );
+    expect(r).toEqual({
+      ok: false,
+      reason: 'Claimed loot is not physically reachable in that time.',
+    });
+  });
+
+  it('minFeasibleMs matches independent BFS math for the deepest crate', () => {
+    // Independent spawn-BFS so the helper is not tested against itself.
+    const bfsFromSpawn = (m: MissionMap): Map<string, number> => {
+      const dist = new Map<string, number>([[`${m.spawn.x},${m.spawn.y}`, 0]]);
+      const queue = [m.spawn];
+      while (queue.length > 0) {
+        const { x, y } = queue.shift()!;
+        const d = dist.get(`${x},${y}`)!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (
+            nx >= 0 && nx < m.width && ny >= 0 && ny < m.height &&
+            m.tiles[ny]![nx] !== 'wall' && !dist.has(`${nx},${ny}`)
+          ) {
+            dist.set(`${nx},${ny}`, d + 1);
+            queue.push({ x: nx, y: ny });
+          }
+        }
+      }
+      return dist;
+    };
+    const deepest = [...map.crates].sort((a, b) => b.depth - a.depth)[0]!;
+    const fromSpawn = bfsFromSpawn(map).get(`${deepest.x},${deepest.y}`)!;
+    expect(minFeasibleMs(map, [deepest.id])).toBe(
+      (fromSpawn + deepest.depth) * BALANCE.mission.minMsPerTile,
+    );
+  });
+
+  it('accepts an honest-duration full clear (feasibility never false-positives)', () => {
+    // 60s elapsed (token default) covers every crate's lower bound at 100ms/tile.
+    const all = map.crates.map((c) => c.id);
+    const r = evaluateMission(token, { ...request, collectedCrateIds: all }, 't2_a', 5, 30, NOW);
+    expect(r.ok).toBe(true);
   });
 });

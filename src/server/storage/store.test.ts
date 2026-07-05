@@ -39,6 +39,7 @@ export const makeFakeRedis = (): RedisLike => {
       return next;
     },
     async zAdd(k, ...members) { for (const m of members) zset(k).set(m.member, m.score); return members.length; },
+    async zScore(k, m) { return zset(k).get(m); },
     async zRange(k, start, stop, opts) {
       const all = [...zset(k).entries()]
         .sort((a, b) => (opts?.reverse ? b[1] - a[1] : a[1] - b[1]))
