@@ -129,6 +129,12 @@ api.get('/init', async (c) => {
     missionUsedToday: (yourActionsToday as Record<string, unknown>)['mission'] !== undefined,
     resolving,
     timelinePreview: timeline[0] ?? null,
+    // Plan 2 fields — inert until P5 wires them fully. Stubbed so type-check stays green.
+    activeLaw: null,
+    raidInDays: Math.max(0, Math.ceil((100 - city.threat) / 6)),
+    factionInfluence: { builders: 0, wardens: 0, seekers: 0, hearth: 0 },
+    yourFaction: player.faction,
+    yourFactionRep: player.factionRep,
   });
 });
 

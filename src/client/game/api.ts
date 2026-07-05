@@ -63,6 +63,12 @@ const mockInit: InitResponse = {
     deltas: { food: -9, power: -4, morale: -6, threat: 8 },
     crisisId: 'blackout_ward', winningOptionId: 'a',
   },
+  // Plan 2 fields — inert stubs for the mock fixture.
+  activeLaw: null,
+  raidInDays: 5,
+  factionInfluence: { builders: 8, wardens: 6, seekers: 12, hearth: 4 },
+  yourFaction: null,
+  yourFactionRep: 0,
 };
 
 // ---------- public api ----------
