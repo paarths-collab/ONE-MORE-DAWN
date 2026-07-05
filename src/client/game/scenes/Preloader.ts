@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { H, W } from '../ui';
+import { COLORS, H, W } from '../ui';
 
 export class Preloader extends Phaser.Scene {
   constructor() {
@@ -7,8 +7,8 @@ export class Preloader extends Phaser.Scene {
   }
 
   init() {
-    //  We loaded this image in our Boot Scene, so we can display it here
-    this.add.image(W / 2, H / 2, 'background');
+    //  Plain fill instead of a 295 KB background image — nothing to download.
+    this.cameras.main.setBackgroundColor(COLORS.bg);
 
     //  A simple progress bar. This is the outline of the bar.
     this.add.rectangle(W / 2, H / 2, 468, 32).setStrokeStyle(1, 0xffffff);
@@ -23,15 +23,9 @@ export class Preloader extends Phaser.Scene {
     });
   }
 
-  preload() {
-    //  Load the assets for the game - Replace with your own assets
-    this.load.setPath('../assets');
-
-    this.load.image('logo', 'logo.png');
-  }
-
   create() {
-    //  When all the assets have loaded, hand off to the city dashboard.
+    //  No assets to load — Phaser fires create immediately with an empty
+    //  load queue, so hand straight off to the city dashboard.
     this.scene.start('Dashboard');
   }
 }

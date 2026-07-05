@@ -19,6 +19,12 @@ const GRID_TOP = 200;
 
 type Tile = { x: number; y: number };
 
+// Frozen direction constants so readHeldDirection doesn't allocate per frame.
+const DIR_UP: Readonly<Tile> = Object.freeze({ x: 0, y: -1 });
+const DIR_DOWN: Readonly<Tile> = Object.freeze({ x: 0, y: 1 });
+const DIR_LEFT: Readonly<Tile> = Object.freeze({ x: -1, y: 0 });
+const DIR_RIGHT: Readonly<Tile> = Object.freeze({ x: 1, y: 0 });
+
 type HazardState = {
   x: number;
   y: number;
@@ -297,12 +303,12 @@ export class Mission extends Phaser.Scene {
       .join(' ');
   }
 
-  private readHeldDirection(): { x: number; y: number } | null {
+  private readHeldDirection(): Readonly<Tile> | null {
     if (!this.keys_) return null;
-    if (this.keys_.w.isDown || this.keys_.up.isDown) return { x: 0, y: -1 };
-    if (this.keys_.s.isDown || this.keys_.down.isDown) return { x: 0, y: 1 };
-    if (this.keys_.a.isDown || this.keys_.left.isDown) return { x: -1, y: 0 };
-    if (this.keys_.d.isDown || this.keys_.right.isDown) return { x: 1, y: 0 };
+    if (this.keys_.w.isDown || this.keys_.up.isDown) return DIR_UP;
+    if (this.keys_.s.isDown || this.keys_.down.isDown) return DIR_DOWN;
+    if (this.keys_.a.isDown || this.keys_.left.isDown) return DIR_LEFT;
+    if (this.keys_.d.isDown || this.keys_.right.isDown) return DIR_RIGHT;
     return null;
   }
 
@@ -476,6 +482,23 @@ export class Mission extends Phaser.Scene {
   private finish(status: MissionStatus) {
     if (this.done_) return;
     this.done_ = true;
+
+    // Instant feedback while the completion request is in flight — the scene
+    // transition destroys these automatically.
+    const cam = this.cameras.main;
+    this.add
+      .rectangle(cam.centerX, cam.centerY, cam.width, cam.height, 0x000000, 0.6)
+      .setDepth(2000);
+    this.add
+      .text(cam.centerX, cam.centerY, 'Heading home…', {
+        fontFamily: FONT,
+        fontSize: '24px',
+        color: COLORS.text,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(2001);
+
     if (this.airHeartbeatOn_) {
       this.tweens.killTweensOf(this.airText_);
       this.airText_.setScale(1);
