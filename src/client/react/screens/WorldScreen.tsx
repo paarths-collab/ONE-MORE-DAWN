@@ -35,6 +35,270 @@ const STATUS_ORDER: readonly CityStatusTag[] = [
   'fallen',
 ];
 
+// ---------- navigation: every city is a real subreddit you can travel to ----------
+
+/** "r/meadowbrook" → https://www.reddit.com/r/meadowbrook (opened in a new tab). */
+function visitCity(subreddit: string): void {
+  const path = subreddit.replace(/^\/?/, '');
+  window.open(`https://www.reddit.com/${path}`, '_blank', 'noopener');
+}
+
+/** "r/meadowbrook" → "meadowbrook"; caps length so map labels stay tidy. */
+function shortSub(subreddit: string): string {
+  const bare = subreddit.replace(/^\/?r\//i, '');
+  return bare.length > 11 ? `${bare.slice(0, 10)}…` : bare;
+}
+
+// ---------- deterministic map layout (stable hash → x/y, never Math.random) ----------
+
+/** FNV-1a-ish 32-bit hash — same subreddit always lands in the same spot. */
+function hashStr(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+const MAP_W = 720;
+const MAP_H = 420;
+
+type PlacedCity = { city: WorldCity; x: number; y: number; r: number };
+
+/**
+ * Spread cities across the survey map from a stable hash of their name. Two
+ * independent hash streams (name, name+salt) give x and y; a light jitter grid
+ * plus per-node collision nudging keeps clusters from overlapping. Pure and
+ * deterministic — identical every render, no RNG.
+ */
+function placeCities(cities: readonly WorldCity[]): PlacedCity[] {
+  const padX = 46;
+  const padY = 52;
+  const placed: PlacedCity[] = [];
+  for (const city of cities) {
+    const hx = hashStr(city.subreddit);
+    const hy = hashStr(`${city.subreddit}::y`);
+    let x = padX + ((hx % 100000) / 100000) * (MAP_W - padX * 2);
+    let y = padY + ((hy % 100000) / 100000) * (MAP_H - padY * 2);
+    // node size grows gently with survival (the headline stat)
+    const r = 7 + Math.min(9, Math.sqrt(Math.max(0, city.survivalDays)) * 1.6);
+    // nudge away from already-placed nodes so labels don't collide
+    for (let pass = 0; pass < 24; pass++) {
+      let moved = false;
+      for (const p of placed) {
+        const dx = x - p.x;
+        const dy = y - p.y;
+        const dist = Math.hypot(dx, dy);
+        const min = r + p.r + 46;
+        if (dist < min && dist > 0.01) {
+          const push = (min - dist) / 2;
+          x += (dx / dist) * push;
+          y += (dy / dist) * push;
+          moved = true;
+        }
+      }
+      x = Math.max(padX, Math.min(MAP_W - padX, x));
+      y = Math.max(padY, Math.min(MAP_H - padY, y));
+      if (!moved) break;
+    }
+    placed.push({ city, x, y, r });
+  }
+  return placed;
+}
+
+// ---------- the survey map (inline SVG, CSS-only glow, no per-frame JS) ----------
+
+/** Scoped styles for the map + clickable rows. Injected once (single edited
+ *  file); animations are CSS transforms/opacity only — no requestAnimationFrame. */
+const MAP_CSS = `
+.pxl-map-sweep { animation: pxlMapSweep 7s linear infinite; }
+@keyframes pxlMapSweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.pxl-map-you-ring { animation: pxlMapPing 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pxlMapPing { 0%,100% { opacity: .9; } 50% { opacity: .35; } }
+.pxl-map-node text { transition: fill .15s; }
+.pxl-map-node:hover > circle:nth-of-type(2),
+.pxl-map-node:focus-visible > circle:nth-of-type(2) { stroke: var(--gold); stroke-width: 2.5; }
+.pxl-map-node:hover text, .pxl-map-node:focus-visible text { fill: var(--gold); }
+.pxl-map-node:focus { outline: none; }
+.pxl-wrow-btn { transition: transform .1s, border-color .12s; }
+.pxl-wrow-btn:hover { border-color: var(--goldline); }
+.pxl-wrow-btn:active { transform: scale(.99); }
+@media (prefers-reduced-motion: reduce) {
+  .pxl-map-sweep, .pxl-map-you-ring { animation: none; }
+}
+`;
+
+function WorldMap({ cities }: { cities: readonly WorldCity[] }) {
+  const placed = useMemo(() => placeCities(cities), [cities]);
+  const you = placed.find((p) => p.city.isYou) ?? null;
+
+  // faint topo grid lines
+  const gridCols = 9;
+  const gridRows = 5;
+
+  return (
+    <div className="pxl-panel card" style={{ padding: 0, overflow: 'hidden', position: 'relative' }}>
+      <style>{MAP_CSS}</style>
+      <div className="pxl-phead" style={{ padding: '13px 16px 0' }}>
+        <span className="lbl">🛰️ Survey Map</span>
+        <span className="meta">tap a city to travel ↗</span>
+      </div>
+      <div style={{ position: 'relative', width: '100%' }}>
+        <svg
+          viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+          width="100%"
+          role="img"
+          aria-label={`Survey map of ${cities.length} subreddit-cities`}
+          style={{ display: 'block' }}
+        >
+          <defs>
+            <radialGradient id="pxlMapBg" cx="50%" cy="42%" r="75%">
+              <stop offset="0%" stopColor="#181410" />
+              <stop offset="60%" stopColor="#0f0c0a" />
+              <stop offset="100%" stopColor="#0a0807" />
+            </radialGradient>
+            <radialGradient id="pxlSweep" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="rgba(232,195,74,.16)" />
+              <stop offset="70%" stopColor="rgba(232,195,74,.05)" />
+              <stop offset="100%" stopColor="rgba(232,195,74,0)" />
+            </radialGradient>
+            <filter id="pxlNodeGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="3.4" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {/* base */}
+          <rect x="0" y="0" width={MAP_W} height={MAP_H} fill="url(#pxlMapBg)" />
+
+          {/* topo / grid lines */}
+          <g stroke="#2a2320" strokeWidth="1" opacity="0.55">
+            {Array.from({ length: gridCols - 1 }).map((_, i) => {
+              const x = ((i + 1) / gridCols) * MAP_W;
+              return <line key={`v${i}`} x1={x} y1="0" x2={x} y2={MAP_H} />;
+            })}
+            {Array.from({ length: gridRows - 1 }).map((_, i) => {
+              const y = ((i + 1) / gridRows) * MAP_H;
+              return <line key={`h${i}`} x1="0" y1={y} x2={MAP_W} y2={y} />;
+            })}
+          </g>
+          {/* concentric topo rings from map center */}
+          <g stroke="#332a20" strokeWidth="1" fill="none" opacity="0.5">
+            {[70, 140, 210, 280].map((rr) => (
+              <ellipse key={rr} cx={MAP_W / 2} cy={MAP_H / 2} rx={rr * 1.25} ry={rr} />
+            ))}
+          </g>
+
+          {/* slow radar sweep — pure CSS rotation, one element, cheap */}
+          <g className="pxl-map-sweep" style={{ transformOrigin: `${MAP_W / 2}px ${MAP_H / 2}px` }}>
+            <path
+              d={`M ${MAP_W / 2} ${MAP_H / 2} L ${MAP_W / 2 + 460} ${MAP_H / 2 - 150} A 490 490 0 0 1 ${MAP_W / 2 + 460} ${MAP_H / 2 + 150} Z`}
+              fill="url(#pxlSweep)"
+            />
+          </g>
+
+          {/* link lines from your city to neighbors (travel routes) */}
+          {you !== null && (
+            <g stroke="var(--goldline)" strokeWidth="1" strokeDasharray="3 5" opacity="0.5">
+              {placed
+                .filter((p) => !p.city.isYou)
+                .map((p) => (
+                  <line key={`ln-${p.city.subreddit}`} x1={you.x} y1={you.y} x2={p.x} y2={p.y} />
+                ))}
+            </g>
+          )}
+
+          {/* city nodes */}
+          {placed.map((p) => {
+            const def = WORLD_STATUS_DEFS[p.city.status];
+            const isYou = p.city.isYou;
+            return (
+              <g
+                key={p.city.subreddit}
+                className="pxl-map-node"
+                onClick={() => visitCity(p.city.subreddit)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Visit ${p.city.subreddit}, ${def.label}, ${p.city.survivalDays} dawns survived`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    visitCity(p.city.subreddit);
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* generous invisible hit area */}
+                <circle cx={p.x} cy={p.y} r={p.r + 16} fill="transparent" />
+                {isYou && (
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={p.r + 8}
+                    fill="none"
+                    stroke="var(--gold)"
+                    strokeWidth="2"
+                    className="pxl-map-you-ring"
+                  />
+                )}
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={p.r}
+                  fill={def.color}
+                  stroke={isYou ? 'var(--gold)' : 'rgba(0,0,0,.5)'}
+                  strokeWidth={isYou ? 2 : 1}
+                  filter="url(#pxlNodeGlow)"
+                />
+                <circle cx={p.x - p.r * 0.3} cy={p.y - p.r * 0.3} r={p.r * 0.28} fill="rgba(255,255,255,.55)" />
+                {/* label */}
+                <text
+                  x={p.x}
+                  y={p.y + p.r + 13}
+                  textAnchor="middle"
+                  fontFamily="'JetBrains Mono', monospace"
+                  fontSize="11"
+                  fontWeight="700"
+                  fill={isYou ? 'var(--gold)' : 'var(--ink)'}
+                >
+                  {shortSub(p.city.subreddit)}
+                </text>
+                <text
+                  x={p.x}
+                  y={p.y + p.r + 25}
+                  textAnchor="middle"
+                  fontFamily="'JetBrains Mono', monospace"
+                  fontSize="9"
+                  fill="var(--mut)"
+                >
+                  {def.icon} {p.city.survivalDays}d
+                </text>
+                {isYou && (
+                  <text
+                    x={p.x}
+                    y={p.y - p.r - 9}
+                    textAnchor="middle"
+                    fontFamily="'Silkscreen','JetBrains Mono',monospace"
+                    fontSize="8"
+                    fill="var(--gold)"
+                    letterSpacing="1"
+                  >
+                    ★ YOU
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 // ---------- ready body (own hooks, mounted only when data is in) ----------
 
 function WorldBody({ data }: { data: WorldResponse }) {
@@ -78,6 +342,42 @@ function WorldBody({ data }: { data: WorldResponse }) {
 
   return (
     <>
+      {/* ---- prominent participation banner ---- */}
+      <div
+        className="pxl-panel card"
+        style={{
+          padding: '13px 16px',
+          border: '1px solid var(--goldline)',
+          background: 'linear-gradient(180deg,#1d1608,var(--card))',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            fontFamily: 'var(--pixel)',
+            fontSize: 13,
+            letterSpacing: 1,
+            color: 'var(--gold)',
+            lineHeight: 1.5,
+          }}
+        >
+          🌐 {data.totalCities} {data.totalCities === 1 ? 'CITY' : 'CITIES'} HOLDING THE LINE
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 5 }}>
+          {data.yourRank !== null ? (
+            <>
+              you&rsquo;re <b style={{ color: 'var(--ink)' }}>#{data.yourRank}</b> — every node is a real
+              subreddit
+            </>
+          ) : (
+            <>every node is a real subreddit · dawn spares no one</>
+          )}
+        </div>
+      </div>
+
+      {/* ---- the survey map ---- */}
+      <WorldMap cities={data.cities} />
+
       {/* ---- your rank / eligibility gate ---- */}
       {data.eligible ? (
         <div className="pxl-panel card">
@@ -172,11 +472,19 @@ function WorldBody({ data }: { data: WorldResponse }) {
           const def = WORLD_STATUS_DEFS[c.status];
           const medal = MEDALS[i];
           return (
-            <div key={c.subreddit} className={c.isYou ? 'pxl-wrow you' : 'pxl-wrow'}>
+            <button
+              key={c.subreddit}
+              type="button"
+              className={c.isYou ? 'pxl-wrow you pxl-wrow-btn' : 'pxl-wrow pxl-wrow-btn'}
+              onClick={() => visitCity(c.subreddit)}
+              title={`Travel to ${c.subreddit}`}
+              aria-label={`Visit ${c.subreddit}, rank ${i + 1}, ${def.label}`}
+              style={{ width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+            >
               <span className="rk" aria-hidden="true">
                 {medal ?? `#${i + 1}`}
               </span>
-              <span style={{ minWidth: 0 }}>
+              <span style={{ minWidth: 0, flex: 1 }}>
                 <span className="wn">
                   {c.subreddit}
                   {c.isYou && (
@@ -188,6 +496,7 @@ function WorldBody({ data }: { data: WorldResponse }) {
                 <span className="ws" style={{ color: def.color }}>
                   {def.icon} {def.label.toUpperCase()}
                   {c.status === 'fallen' ? ` · FELL D${c.day}` : ''}
+                  <span style={{ color: 'var(--mut)', marginLeft: 6 }}>↗ visit</span>
                 </span>
               </span>
               <span
@@ -197,7 +506,7 @@ function WorldBody({ data }: { data: WorldResponse }) {
                 {sortDef.value(c)}
                 <span style={{ color: 'var(--mut)', fontSize: 8 }}> {sortDef.unit}</span>
               </span>
-            </div>
+            </button>
           );
         })}
 

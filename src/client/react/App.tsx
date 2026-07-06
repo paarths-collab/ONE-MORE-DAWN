@@ -31,6 +31,7 @@ import { useFetch } from './kit/useFetch';
 import { CrisisScreen } from './screens/CrisisScreen';
 import { FeedScreen } from './screens/FeedScreen';
 import { Avatar, HomeScreen } from './screens/HomeScreen';
+import { RulesScreen } from './screens/RulesScreen';
 import { WorldScreen } from './screens/WorldScreen';
 import { YouScreen } from './screens/YouScreen';
 import { DawnReportModal, FallenCity, RoleGate } from './screens/moments';
@@ -50,6 +51,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [dawnSeen, setDawnSeen] = useState(false);
   const [selCit, setSelCit] = useState(0);
+  const [showRules, setShowRules] = useState(false);
   const { toasts, push } = useToasts();
   const village = useFetch<VillageResponse>(() => api.village());
   const subreddit = village.kind === 'ready' ? village.data.subreddit : null;
@@ -340,12 +342,21 @@ export function App() {
             <div className="handle">{data.player.title ?? 'the overseer'}</div>
           </div>
           <div>
-            <div className="pxl-side-sec">Your City</div>
+            <div className="pxl-side-sec">Your Cities</div>
             <div className="pxl-vrow on">
               <span className="sq" style={{ background: 'var(--green)' }} />
               <span className="nm">{subName}</span>
               <span className="on-ct">{vil?.onlineCount ?? 0}•</span>
             </div>
+            <button
+              type="button"
+              className="pxl-vrow"
+              style={{ width: '100%', background: 'none', fontFamily: 'var(--mono)', color: 'var(--blue)' }}
+              onClick={() => setTab('world')}
+            >
+              <span className="sq" style={{ background: 'var(--blue)' }} />
+              <span className="nm">↗ travel to other cities</span>
+            </button>
           </div>
           <div>
             <div className="pxl-side-sec">Navigate</div>
@@ -377,6 +388,16 @@ export function App() {
             <div className="pxl-pill">
               ⚡ {vil?.onlineCount ?? '—'}/{vil?.totalCount ?? data.city.population}
             </div>
+            <button
+              type="button"
+              className="pxl-pill"
+              style={{ cursor: 'pointer', borderColor: 'var(--line2)', background: 'var(--card2)', color: 'var(--ink)' }}
+              onClick={() => setShowRules(true)}
+              aria-label="How to play"
+              title="How to play"
+            >
+              ? RULES
+            </button>
           </header>
           <div className="pxl-content">
             {tab === 'home' && (
@@ -463,6 +484,21 @@ export function App() {
         <DawnReportModal report={data.dawnReport} onDismiss={() => setDawnSeen(true)} />
       )}
       {mission && <MissionOverlay start={mission.start} threat={mission.threat} onClose={onMissionClose} />}
+      {showRules && (
+        <div className="pxl-overlay" onClick={() => setShowRules(false)}>
+          <div className="pxl-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pxl-sheet-head">
+              <span className="pxl-sheet-title">📖 HOW TO PLAY</span>
+              <button type="button" className="pxl-sheet-x" onClick={() => setShowRules(false)} aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <div className="pxl-sheet-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <RulesScreen />
+            </div>
+          </div>
+        </div>
+      )}
     </>,
   );
 }
