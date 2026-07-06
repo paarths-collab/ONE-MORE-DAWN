@@ -80,6 +80,23 @@ export function App() {
     dataRef.current = net.kind === 'ready' ? net.data : null;
   }, [net]);
 
+  /**
+   * A mutation failed. Roll the optimistic patch back to the snapshot captured
+   * before it, THEN try to reconcile with the server. The rollback matters when
+   * the reconciling refetch ALSO fails (same outage): load(false)'s catch is a
+   * no-op, so without this the UI would keep claiming an action ("You've helped
+   * today") the server never recorded. Restoring the snapshot first makes the
+   * pre-mutation state the fallback truth.
+   */
+  const rollback = useCallback(
+    (snapshot: InitResponse | null, err: Error) => {
+      push(`⚠️ ${err.message}`);
+      if (snapshot) setNet({ kind: 'ready', data: snapshot });
+      refresh();
+    },
+    [push, refresh],
+  );
+
   // ---- mutations (optimistic + reconcile with server response) ----
 
   const onPledge = useCallback(
@@ -111,16 +128,14 @@ export function App() {
       api
         .pledge(kind)
         .then((r) => patch((d) => ({ ...d, marked: r.marked, pledge: r.pledge, player: r.player })))
-        .catch((err: Error) => {
-          push(`⚠️ ${err.message}`);
-          refresh();
-        });
+        .catch((err: Error) => rollback(current, err));
     },
-    [patch, push, refresh],
+    [patch, push, rollback],
   );
 
   const onVote = useCallback(
     (optionId: string, crisisId: string) => {
+      const snapshot = dataRef.current;
       patch((d) => ({
         ...d,
         yourCrisisVote: optionId,
@@ -132,18 +147,16 @@ export function App() {
         .then((r) =>
           patch((d) => ({ ...d, crisisVotes: r.crisisVotes, yourCrisisVote: r.yourCrisisVote })),
         )
-        .catch((err: Error) => {
-          push(`⚠️ ${err.message}`);
-          refresh();
-        });
+        .catch((err: Error) => rollback(snapshot, err));
     },
-    [patch, push, refresh],
+    [patch, push, rollback],
   );
 
   const onStrategy = useCallback(
     (planId: StrategyPlanId) => {
       // One plan per day, no switching — the server 409s a re-vote, so never
       // optimistically move the vote. Ignore taps once a plan is already backed.
+      const snapshot = dataRef.current;
       let accepted = false;
       patch((d) => {
         if (d.yourStrategyVote !== null) return d;
@@ -163,16 +176,14 @@ export function App() {
             yourStrategyVote: r.yourStrategyVote,
           })),
         )
-        .catch((err: Error) => {
-          push(`⚠️ ${err.message}`);
-          refresh();
-        });
+        .catch((err: Error) => rollback(snapshot, err));
     },
-    [patch, push, refresh],
+    [patch, push, rollback],
   );
 
   const onAction = useCallback(
     (action: ActionType) => {
+      const snapshot = dataRef.current;
       const def = ACTION_DEFS.find((a) => a.id === action);
       patch((d) => ({
         ...d,
@@ -194,12 +205,9 @@ export function App() {
           }));
           if (r.unlockedTitle !== null) push(`🎖️ Title unlocked — ${r.unlockedTitle}`);
         })
-        .catch((err: Error) => {
-          push(`⚠️ ${err.message}`);
-          refresh();
-        });
+        .catch((err: Error) => rollback(snapshot, err));
     },
-    [patch, push, refresh],
+    [patch, push, rollback],
   );
 
   const onRole = useCallback(
@@ -217,17 +225,15 @@ export function App() {
 
   const onMission = useCallback(
     (route: MissionRoute) => {
+      const snapshot = dataRef.current;
       patch((d) => ({ ...d, missionUsedToday: true }));
       push('🎒 Expedition launched — the team returns at dawn');
       api
         .missionStart(route)
         .then((r) => patch((d) => ({ ...d, player: r.player, effectiveEnergy: r.effectiveEnergy })))
-        .catch((err: Error) => {
-          push(`⚠️ ${err.message}`);
-          refresh();
-        });
+        .catch((err: Error) => rollback(snapshot, err));
     },
-    [patch, push, refresh],
+    [patch, push, rollback],
   );
 
   const handlers: Handlers = { onPledge, onVote, onStrategy, onAction, onRole, onMission };
