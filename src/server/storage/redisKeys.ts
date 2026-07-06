@@ -14,6 +14,11 @@ export const KEYS = {
   gameConfig: 'game:config',
   // Hook layer: dawn outcomes of the daily Marked, keyed by day (like timeline).
   markedOutcomes: 'marked:outcomes',
+  // Per-USER optimistic-lock counter. Energy-spend writes (action / mission
+  // start) watch THIS key, not the shared `players` hash, so two different
+  // users acting at once never abort each other — only a genuine same-user
+  // double-tap conflicts. Bumped inside the transaction (see beginUserLock).
+  playerLock: (userId: string) => `player:lock:${userId}`,
 
   dayActions: (day: number) => `day:${day}:actions`,
   dayUserActions: (day: number) => `day:${day}:userActions`,

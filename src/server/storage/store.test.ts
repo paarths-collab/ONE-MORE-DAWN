@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { Store, type RedisLike } from './store';
+import type { LockableRedis, LockTx } from '../game/userLock';
 import type { CityState, PlayerProfile } from '../../shared/types';
 
-/** Minimal in-memory fake covering the subset Store uses. Exported for reuse in later route tests. */
-export const makeFakeRedis = (): RedisLike => {
+/**
+ * Minimal in-memory fake covering the subset Store uses, PLUS a real model of
+ * WATCH/MULTI/EXEC optimistic concurrency (used by beginUserLock). Every
+ * mutating op bumps a per-key version; a transaction remembers the versions of
+ * its watched keys at watch() time and exec() aborts (returns []) if any of them
+ * changed in the meantime — exactly Redis's optimistic-lock contract. Exported
+ * for reuse across the test suite.
+ */
+export type FakeRedis = RedisLike & LockableRedis;
+
+export const makeFakeRedis = (): FakeRedis => {
   const strings = new Map<string, string>();
   const hashes = new Map<string, Map<string, string>>();
   const zsets = new Map<string, Map<string, number>>();
+  const versions = new Map<string, number>();
+  const bump = (k: string) => versions.set(k, (versions.get(k) ?? 0) + 1);
+  const ver = (k: string) => versions.get(k) ?? 0;
   const hash = (k: string) => {
     if (!hashes.has(k)) hashes.set(k, new Map());
     return hashes.get(k)!;
@@ -15,30 +28,49 @@ export const makeFakeRedis = (): RedisLike => {
     if (!zsets.has(k)) zsets.set(k, new Map());
     return zsets.get(k)!;
   };
+
+  // Mutation impls shared by the direct methods and the queued transaction
+  // commands, so both go through the same version bookkeeping.
+  const setImpl = (k: string, v: string, opts?: { nx?: boolean }): string => {
+    if (opts?.nx && strings.has(k)) return '';
+    strings.set(k, v);
+    bump(k);
+    return 'OK';
+  };
+  const hSetImpl = (k: string, fv: Record<string, string>): number => {
+    for (const [f, v] of Object.entries(fv)) hash(k).set(f, v);
+    bump(k);
+    return 0;
+  };
+  const incrByImpl = (k: string, by: number): number => {
+    const next = Number(strings.get(k) ?? '0') + by;
+    strings.set(k, String(next));
+    bump(k);
+    return next;
+  };
+
   return {
     async get(k) { return strings.get(k); },
-    async set(k, v, opts) {
-      if (opts?.nx && strings.has(k)) return '';
-      strings.set(k, v);
-      return 'OK';
-    },
-    async del(...keys) { for (const k of keys) { strings.delete(k); hashes.delete(k); zsets.delete(k); } },
+    async set(k, v, opts) { return setImpl(k, v, opts); },
+    async del(...keys) { for (const k of keys) { strings.delete(k); hashes.delete(k); zsets.delete(k); bump(k); } },
     async expire() { /* TTL not simulated */ },
     async hGet(k, f) { return hash(k).get(f); },
-    async hSet(k, fv) { for (const [f, v] of Object.entries(fv)) hash(k).set(f, v); return 0; },
+    async hSet(k, fv) { return hSetImpl(k, fv); },
     async hGetAll(k) { return Object.fromEntries(hash(k)); },
     async hIncrBy(k, f, by) {
       const next = Number(hash(k).get(f) ?? '0') + by;
       hash(k).set(f, String(next));
+      bump(k);
       return next;
     },
-    async hDel(k, fields) { for (const f of fields) hash(k).delete(f); },
+    async hDel(k, fields) { for (const f of fields) hash(k).delete(f); bump(k); },
     async zIncrBy(k, m, by) {
       const next = (zset(k).get(m) ?? 0) + by;
       zset(k).set(m, next);
+      bump(k);
       return next;
     },
-    async zAdd(k, ...members) { for (const m of members) zset(k).set(m.member, m.score); return members.length; },
+    async zAdd(k, ...members) { for (const m of members) zset(k).set(m.member, m.score); bump(k); return members.length; },
     async zScore(k, m) { return zset(k).get(m); },
     async zRange(k, start, stop, opts) {
       const all = [...zset(k).entries()]
@@ -46,6 +78,23 @@ export const makeFakeRedis = (): RedisLike => {
         .map(([member, score]) => ({ member, score }));
       const stopIdx = typeof stop === 'number' && stop === -1 ? all.length - 1 : Number(stop);
       return all.slice(Number(start), stopIdx + 1);
+    },
+    async watch(...keys: string[]): Promise<LockTx> {
+      // snapshot the watched keys' versions at watch time
+      const snapshot = new Map(keys.map((k) => [k, ver(k)] as const));
+      const queued: Array<() => unknown> = [];
+      const tx: LockTx = {
+        async multi() { return undefined; },
+        async hSet(k, fv) { queued.push(() => hSetImpl(k, fv)); return undefined; },
+        async incrBy(k, by) { queued.push(() => incrByImpl(k, by)); return undefined; },
+        async unwatch() { snapshot.clear(); return undefined; },
+        async exec() {
+          // any watched key modified since watch() → abort with empty array
+          for (const [k, v] of snapshot) if (ver(k) !== v) return [];
+          return queued.map((cmd) => cmd());
+        },
+      };
+      return tx;
     },
   };
 };

@@ -36,6 +36,7 @@ import { buildVillagers, buildZones, maskName } from '../game/village';
 import { bumpRoleRep, effectiveEnergy, loadOrCreatePlayer } from '../game/dayLogic';
 import { runLazyResolution, utcDateString } from '../game/lazyResolve';
 import { resolveDay } from '../game/resolver';
+import { beginUserLock } from '../game/userLock';
 import {
   citySummary,
   displaySubredditName,
@@ -405,16 +406,18 @@ api.post('/action', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
   }
 
-  // Optimistic-concurrency energy spend: watch players; conflict → retry.
-  const tx = await redis.watch(KEYS.players);
+  // Per-user optimistic energy spend: watch ONLY this user's lock key, so two
+  // DIFFERENT users acting in the same instant never abort each other — only a
+  // genuine same-user double-tap conflicts (see beginUserLock).
+  const lock = await beginUserLock(redis, user.userId);
   const player = await store.getPlayer(user.userId);
   if (!player) {
-    await tx.unwatch();
+    await lock.abort();
     return c.json<ApiError>({ status: 'error', message: 'Open the game first' }, 409);
   }
   const error = validateAction(player, city.day, body.action);
   if (error) {
-    await tx.unwatch();
+    await lock.abort();
     return c.json<ApiError>({ status: 'error', message: error }, 400);
   }
 
@@ -423,9 +426,10 @@ api.post('/action', async (c) => {
     energyUsedToday: player.energyUsedToday + 1,
     totalContribution: player.totalContribution + BALANCE.contributionPerAction,
   };
-  await tx.multi();
-  await tx.hSet(KEYS.players, { [user.userId]: JSON.stringify(updated) });
-  if (!(await execOrConflict(tx))) {
+  const committed = await lock.commit(async (tx) => {
+    await tx.hSet(KEYS.players, { [user.userId]: JSON.stringify(updated) });
+  });
+  if (!committed) {
     return c.json<ApiError>({ status: 'error', message: 'Busy — try again' }, 409);
   }
 

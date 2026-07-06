@@ -11,6 +11,7 @@ import type {
 } from '../../shared/types';
 import { bumpRoleRep, effectiveEnergy } from '../game/dayLogic';
 import { evaluateMission, type MissionToken } from '../game/missionRules';
+import { beginUserLock } from '../game/userLock';
 import { KEYS } from '../storage/redisKeys';
 import { getStore, parseBody } from './api';
 
@@ -53,20 +54,22 @@ mission.post('/start', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'The city is beyond saving.' }, 409);
   }
 
-  // Energy deducted AT START (spec §4): watch players; one mission per day.
-  const tx = await redis.watch(KEYS.players);
+  // Energy deducted AT START (spec §4). Per-user optimistic lock: watch ONLY
+  // this user's lock key so concurrent OTHER-user starts never conflict — one
+  // mission per day is still enforced by the getUserActions check below.
+  const lock = await beginUserLock(redis, userId);
   const player = await store.getPlayer(userId);
   if (!player) {
-    await tx.unwatch();
+    await lock.abort();
     return c.json<ApiError>({ status: 'error', message: 'Open the game first' }, 409);
   }
   if (player.energyUsedToday >= effectiveEnergy(player, city.day)) {
-    await tx.unwatch();
+    await lock.abort();
     return c.json<ApiError>({ status: 'error', message: 'No energy left today.' }, 400);
   }
   const mine = await store.getUserActions(city.day, userId);
   if ((mine as Record<string, number>)['mission']) {
-    await tx.unwatch();
+    await lock.abort();
     return c.json<ApiError>(
       { status: 'error', message: 'One expedition per day. The ruins will still be there tomorrow.' },
       400,
@@ -74,9 +77,10 @@ mission.post('/start', async (c) => {
   }
 
   const updated = { ...player, energyUsedToday: player.energyUsedToday + 1 };
-  await tx.multi();
-  await tx.hSet(KEYS.players, { [userId]: JSON.stringify(updated) });
-  if (!(await execOrConflict(tx))) {
+  const committed = await lock.commit(async (tx) => {
+    await tx.hSet(KEYS.players, { [userId]: JSON.stringify(updated) });
+  });
+  if (!committed) {
     return c.json<ApiError>({ status: 'error', message: 'Busy — try again' }, 409);
   }
 
