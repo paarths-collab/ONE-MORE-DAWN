@@ -645,11 +645,31 @@ api.get('/world', async (c) => {
     subredditId === context.subredditId ||
     (context.subredditName !== undefined &&
       record.subreddit === displaySubredditName(context.subredditName));
-  const cities = rankCities(
+  let cities = rankCities(
     Object.entries(records).map(([subredditId, record]) =>
       toWorldCity(record, isYou(subredditId, record)),
     ),
   );
+
+  // Empty world (fresh deploy, or the only sub is still under the gate): show the
+  // caller their OWN city so the map is never blank. Not written to the global
+  // registry — just surfaced in this caller's own view.
+  if (cities.length === 0 && context.subredditId) {
+    const localCity = await store.getCityState();
+    if (localCity) {
+      const [savedCount, todayActions] = await Promise.all([
+        store.countMarkedSaved(),
+        store.getAllUserActions(localCity.day),
+      ]);
+      const own = citySummary(
+        context.subredditName ?? context.subredditId,
+        localCity,
+        savedCount,
+        Object.keys(todayActions).length,
+      );
+      cities = [toWorldCity(own, true)];
+    }
+  }
   const yourIdx = cities.findIndex((city) => city.isYou);
 
   return c.json<WorldResponse>({
