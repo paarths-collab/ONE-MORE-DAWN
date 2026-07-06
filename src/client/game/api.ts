@@ -218,14 +218,26 @@ export const api = {
     MOCK
       ? Promise.resolve(
           mockFirstVisit()
-            ? { ...mockInit, player: { ...mockInit.player, avatar: null, role: null } }
+            ? {
+                ...mockInit,
+                // Brand-new: no avatar/role yet, and (like the real server) no
+                // dawn report on a first-ever visit, so onboarding runs clean.
+                player: { ...mockInit.player, avatar: null, role: null },
+                firstVisitToday: false,
+                dawnReport: null,
+              }
             : mockInit,
         )
       : request<InitResponse>('/api/init'),
 
+  // In newuser preview mode keep role null so the flow continues avatar → role
+  // gate → tour, matching the real server (which preserves the brand-new role).
   saveAvatar: (avatar: AvatarConfig): Promise<AvatarResponse> =>
     MOCK
-      ? Promise.resolve({ type: 'avatar', player: { ...mockInit.player, avatar } })
+      ? Promise.resolve({
+          type: 'avatar',
+          player: { ...mockInit.player, avatar, role: mockFirstVisit() ? null : mockInit.player.role },
+        })
       : request<AvatarResponse>('/api/avatar', { avatar } satisfies AvatarRequest),
 
   pledge: (kind: PledgeKind): Promise<PledgeResponse> =>

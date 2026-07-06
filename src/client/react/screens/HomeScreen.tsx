@@ -109,7 +109,7 @@ function MarkedCard({ data, handlers }: { data: InitResponse; handlers: Handlers
           </span>
         </div>
       ) : (
-        <div className="pxl-pledges">
+        <div className="pxl-pledges" data-tour="pledge">
           {pledge.options.map((o) => (
             <button key={o.id} type="button" className="pxl-pledge" onClick={() => handlers.onPledge(o.id)}>
               <span className="pi" aria-hidden="true">
@@ -159,7 +159,7 @@ function Stats({ data, village }: { data: InitResponse; village: VillageResponse
           {data.raidInDays <= 0 ? 'raid tonight' : `raid in ${data.raidInDays}d`}
         </div>
       </div>
-      <div className="pxl-stat card">
+      <div className="pxl-stat card" data-tour="dawn">
         <div className="top">
           🌅<span className="lbl">Survival</span>
         </div>
@@ -405,7 +405,7 @@ function CrisisPeek({ data, go }: { data: InitResponse; go: (tab: Tab) => void }
   const { crisis, crisisVotes, yourCrisisVote } = data;
   const total = crisis.options.reduce((s, o) => s + (crisisVotes[o.id] ?? 0), 0);
   return (
-    <button type="button" className="pxl-opt" style={{ marginBottom: 0 }} onClick={() => go('crisis')}>
+    <button type="button" className="pxl-opt" style={{ marginBottom: 0 }} data-tour="crisis" onClick={() => go('crisis')}>
       <span className="oi">⚔️</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span className="on">{crisis.title}</span>
