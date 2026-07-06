@@ -4,3 +4,4 @@ dist
 .envdocs/design/uploads/
 docs/design/.thumbnail
 docs/design/support.js
+.gstack/

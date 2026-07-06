@@ -33,6 +33,7 @@ import { CrisisScreen } from './screens/CrisisScreen';
 import { FeedScreen } from './screens/FeedScreen';
 import { Avatar, HomeScreen } from './screens/HomeScreen';
 import { AvatarCreator, PixelAvatar } from './screens/avatarKit';
+import { Coachmarks, HookSplash, TOUR_STEPS } from './screens/onboarding';
 import { RulesScreen } from './screens/RulesScreen';
 import { WorldScreen } from './screens/WorldScreen';
 import { YouScreen } from './screens/YouScreen';
@@ -56,6 +57,12 @@ export function App() {
   const [showRules, setShowRules] = useState(false);
   const [editingAvatar, setEditingAvatar] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  // Onboarding: brand-new players see the hook splash before building an avatar,
+  // then a 3-tap tour once they land on the dashboard. `hookSeen` is what marks a
+  // fresh session (returning players never see the splash, so never auto-tour).
+  const [hookSeen, setHookSeen] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
+  const [tourDone, setTourDone] = useState(false);
   const { toasts, push } = useToasts();
   const village = useFetch<VillageResponse>(() => api.village());
   const subreddit = village.kind === 'ready' ? village.data.subreddit : null;
@@ -89,6 +96,17 @@ export function App() {
   useEffect(() => {
     dataRef.current = net.kind === 'ready' ? net.data : null;
   }, [net]);
+
+  // Launch the 3-tap tour once a fresh player (who just saw the hook) lands fully
+  // onboarded on the dashboard. Returning players have hookSeen=false → no tour.
+  useEffect(() => {
+    if (net.kind !== 'ready' || tourActive || tourDone || !hookSeen) return;
+    const p = net.data.player;
+    if (p.avatar !== null && p.role !== null) {
+      setTab('home');
+      setTourActive(true);
+    }
+  }, [net, hookSeen, tourActive, tourDone]);
 
   /**
    * A mutation failed. Roll the optimistic patch back to the snapshot captured
@@ -324,6 +342,18 @@ export function App() {
 
   if (data.city.status === 'fallen') {
     return shell(<div className="pxl-app">{<FallenCity data={data} />}</div>);
+  }
+  // Brand-new player, first thing they see: the 10-second pitch.
+  if (data.player.avatar === null && !hookSeen) {
+    return shell(
+      <div className="pxl-app">
+        <div className="pxl-mid">
+          <div className="pxl-content" style={{ maxWidth: 500 }}>
+            <HookSplash onBegin={() => setHookSeen(true)} />
+          </div>
+        </div>
+      </div>,
+    );
   }
   if (data.player.avatar === null) {
     return shell(
@@ -576,10 +606,32 @@ export function App() {
               </button>
             </div>
             <div className="pxl-sheet-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button
+                type="button"
+                className="pxl-btn ghost"
+                style={{ marginTop: 0 }}
+                onClick={() => {
+                  setShowRules(false);
+                  setTab('home');
+                  setTourDone(false);
+                  setTourActive(true);
+                }}
+              >
+                ▶ Replay the 3-tap tour
+              </button>
               <RulesScreen />
             </div>
           </div>
         </div>
+      )}
+      {tourActive && (
+        <Coachmarks
+          steps={TOUR_STEPS}
+          onDone={() => {
+            setTourActive(false);
+            setTourDone(true);
+          }}
+        />
       )}
     </>,
   );
