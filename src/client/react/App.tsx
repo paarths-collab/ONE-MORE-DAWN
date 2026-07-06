@@ -28,6 +28,7 @@ import {
   scoutReport,
 } from './defs';
 import type { Handlers } from './handlers';
+import { GameIcon } from './kit/GameIcon';
 import { MuteButton } from './kit/MuteButton';
 import { sfx } from './kit/sound';
 import { ToastLayer, useToasts } from './kit/Toast';
@@ -462,12 +463,14 @@ export function App() {
     vil !== null && vil.villagers.length > 0
       ? vil.villagers[Math.min(selCit, vil.villagers.length - 1)] ?? null
       : null;
-  const NAVS: [Tab, string, string][] = [
-    ['home', '🏠', 'Home'],
-    ['crisis', '⚔️', 'Crisis'],
-    ['feed', '📣', 'Feed'],
-    ['world', '🌐', 'World'],
-    ['you', '🎖️', 'You'],
+  // Tab ids double as GameIcon ids (same five names) — cohesive pixel icons that
+  // inherit each nav item's color instead of platform emoji.
+  const NAVS: [Tab, string][] = [
+    ['home', 'Home'],
+    ['crisis', 'Crisis'],
+    ['feed', 'Feed'],
+    ['world', 'World'],
+    ['you', 'You'],
   ];
 
   return shell(
@@ -512,14 +515,16 @@ export function App() {
           </div>
           <div>
             <div className="pxl-side-sec">Navigate</div>
-            {NAVS.map(([t, ic, l]) => (
+            {NAVS.map(([t, l]) => (
               <button
                 key={t}
                 type="button"
                 className={tab === t ? 'pxl-navrow on' : 'pxl-navrow'}
                 onClick={() => setTab(t)}
               >
-                <span className="ic">{ic}</span>
+                <span className="ic">
+                  <GameIcon id={t} />
+                </span>
                 {l}
                 {t === 'crisis' && crisisPending && <span className="badge">!</span>}
               </button>
@@ -530,7 +535,9 @@ export function App() {
 
         <div className="pxl-mid">
           <header className="pxl-topbar">
-            <div className="pxl-home-ic">🏠</div>
+            <div className="pxl-home-ic">
+              <GameIcon id="home" size={20} />
+            </div>
             <div className="pxl-title">
               <h2>THE LAST CITY</h2>
               <div className="sub">
@@ -594,9 +601,11 @@ export function App() {
         )}
 
         <nav className="pxl-mnav">
-          {NAVS.map(([t, ic, l]) => (
+          {NAVS.map(([t, l]) => (
             <button key={t} type="button" className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-              <span className="ic">{ic}</span>
+              <span className="ic">
+                <GameIcon id={t} size={19} />
+              </span>
               {l.toUpperCase()}
               {t === 'crisis' && crisisPending && <span className="ndot" />}
             </button>

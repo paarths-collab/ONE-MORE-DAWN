@@ -50,7 +50,7 @@
 .pxl-vrow .on-ct { font-family: var(--pixel); font-size: 10px; color: var(--green); flex: none; }
 .pxl-navrow { display: flex; align-items: center; gap: 11px; padding: 11px 10px; border-radius: 9px; margin-bottom: 3px; cursor: pointer; color: var(--mut); font-size: 12.5px; font-weight: 700; background: none; border: 1px solid transparent; width: 100%; text-align: left; font-family: var(--mono); }
 .pxl-navrow.on { background: #1a1408; color: var(--gold); border-color: var(--goldline); }
-.pxl-navrow .ic { width: 18px; text-align: center; flex: none; font-size: 15px; }
+.pxl-navrow .ic { width: 18px; flex: none; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; }
 .pxl-navrow .badge { margin-left: auto; font-family: var(--pixel); font-size: 7px; color: var(--red); background: #2a1212; border: 1px solid #5e2020; border-radius: 5px; padding: 2px 6px; }
 .pxl-sandbox { margin-top: auto; display: flex; gap: 7px; align-items: center; background: #1a1408; border: 1px solid var(--goldline); border-radius: 9px; padding: 10px; font-family: var(--pixel); font-size: 7px; line-height: 1.7; color: var(--gold); }
 
@@ -70,7 +70,7 @@
 .pxl-mnav { display: none; flex: none; border-top: 1px solid var(--line); background: #0e0b0b; padding: 7px 4px calc(7px + env(safe-area-inset-bottom, 0)); }
 .pxl-mnav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: var(--pixel); font-size: 7px; color: var(--mut); padding: 7px 0; cursor: pointer; background: none; border: 0; position: relative; }
 .pxl-mnav button.on { color: var(--gold); }
-.pxl-mnav button .ic { font-size: 17px; line-height: 1; }
+.pxl-mnav button .ic { font-size: 17px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; height: 19px; }
 .pxl-mnav .ndot { position: absolute; top: 2px; right: 22%; width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pxlPulse 1.4s infinite; }
 
 /* ---- panels + shared bits ---- */
