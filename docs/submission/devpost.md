@@ -1,8 +1,8 @@
 # Devpost Submission Draft — One More Dawn
 
-Copy-paste ready. Every claim is grounded in the vertical-slice snapshot
-(commit `c06f4d7`, tag `vertical-slice`). Update the video URL and playtest
-subreddit URL before submitting.
+Copy-paste ready. Reflects the current build (Devvit Web + React, Phaser for the
+expedition mini-game). Update the video URL and playtest subreddit URL before
+submitting.
 
 ---
 
@@ -39,48 +39,56 @@ simulation.
 ## What it does
 
 - One real day is one game day. The city is per-subreddit and persistent —
-  every post shows the same city.
-- Each player sees a daily **City Report**: resources (food, power,
-  medicine, morale, threat, population), the active crisis, the active law,
-  and yesterday's timeline entry.
-- Six **roles** (Scout, Engineer, Medic, Farmer, Guard, Speaker), each with
-  a bonus to matching actions. Changeable once every three days.
-- Three daily **energy** points spent on city actions — Grow Food, Repair
-  Power, Treat Sick, Guard Wall — or one 90-second **expedition mission**
-  into the ruins.
-- One **crisis vote** and one **Council Plan** strategy vote per player
-  per day. Locked once cast.
-- The expedition is a seeded top-down mini-game: same map for the whole
-  subreddit, personalized loot per player, air timer, warning-shot hazards,
-  a bank-your-haul exit.
-- A **timeline** scene shows the city's permanent history — every day, the
-  headline, the events, the deltas.
-- A mod-only admin menu with **force-resolve**, **reset**, and **seed-demo**
-  actions for judging and testing.
+  every post shows the same city, and one app install becomes many isolated
+  cities (one per subreddit).
+- **The Marked** — a named survivor or landmark in danger tonight. Anyone can
+  save it with **one tap** (no energy needed): the lurker path into the game.
+- A daily **crisis vote** with visible tradeoffs and a **council plan** strategy
+  vote — one each per player per day, locked once cast.
+- Three **energy** points a day on city actions — Grow Food, Repair Power, Treat
+  Sick, Guard Wall — or one 90-second **expedition** into the ruins.
+- **Six roles** (Scout, Engineer, Medic, Farmer, Guard, Speaker) with matching
+  bonuses and a 3-day change cooldown; earned **titles** and contribution rank.
+- A **survivor avatar** — chosen name, pronouns, and a pixel look — so every
+  masked redditor has a face in the city.
+- The **Dawn Report** on the first visit each day: yesterday's city summary plus
+  your personal impact. This is the "come back tomorrow" hook.
+- A **living skyline** that shifts with the city's mood, **vitals** that flash on
+  change, a **danger ambient** that reddens as a raid nears, and synthesized
+  **sound** with a mute toggle.
+- A **live drama feed**, a permanent **timeline**, and a **World of Cities** map
+  ranking participating subreddits against each other.
+- **Factions & laws** (Builders / Wardens / Seekers / Hearth) that emerge from
+  what players actually do.
+- A mod-only admin menu with **force-resolve**, **reset**, and a rich
+  **seed-demo** that spins up a judge-ready mid-run city.
 
 ---
 
 ## How we built it
 
 - **Devvit Web** app running inside Reddit posts (`@devvit/web` 0.13).
-- **Phaser 4.2** for the client scenes (Boot, Preloader, Dashboard,
-  RoleSelect, Actions, Vote, Mission, MissionEnd, Timeline).
+- **React 18 + TypeScript + Vite 8** for the whole UI — a mobile-first pixel
+  command console (`exactOptionalPropertyTypes: true`, strict throughout). We
+  chose React deliberately: this is an async community strategy *dashboard*, and
+  DOM stays crisp and battery-light where a canvas would blur and churn.
+- **Phaser 4.2** for the one place it earns its keep: the 90-second expedition
+  mini-game (seeded, anti-cheat).
+- **Self-hosted fonts** (Silkscreen + JetBrains Mono via `@fontsource`), bundled
+  same-origin so the pixel aesthetic survives the Devvit webview CSP.
 - **Hono 4** for server endpoints under `/api/`.
 - **Devvit Redis** for all persistent state — hashes for city and players,
-  sorted sets for leaderboards and the timeline, per-day hash keys for
-  action and vote tallies. No lists (Devvit Redis does not support them).
-- **Vite 8 + TypeScript** with `exactOptionalPropertyTypes: true` on the
-  client, strict throughout.
-- **Deterministic seeded map generation** shared between client (render)
-  and server (anti-cheat validation) via `src/shared/mapgen.ts` — same
-  seed, byte-identical map.
-- **Lazy day resolver** under an NX lock — no cron infrastructure. The
-  first request after midnight UTC triggers resolution of the previous
-  day.
-- **Optimistic-concurrency** energy spend and vote lock-in via
-  watch/multi/exec.
-- **85 tests** including a full-loop integration proof that drives the
-  store and pure game logic end-to-end.
+  sorted sets for leaderboards, per-day hash keys for action/vote/pledge
+  tallies, and `redis.global` for the cross-subreddit World map. No lists
+  (Devvit Redis does not support them).
+- **Deterministic seeded map generation** shared between client (render) and
+  server (anti-cheat validation) via `src/shared/mapgen.ts` — same seed,
+  byte-identical map.
+- **Lazy day resolver** under an NX lock — no cron. The first request after
+  midnight UTC resolves the previous day.
+- **Optimistic-concurrency** energy spend and vote lock-in via watch/multi/exec.
+- **416 tests** including a full-loop integration proof and property tests that
+  drive the store and pure game logic end-to-end.
 
 ---
 
@@ -120,15 +128,16 @@ food and power pressure.
 
 ## Accomplishments that we're proud of
 
-- Full vertical slice from empty repo to tested, integration-proofed,
-  CI-green in under a week.
-- 85 automated tests, including a full-loop end-to-end proof that drives
-  the store and pure game logic (role → actions → mission → votes → day
-  rollover).
-- Reddit-native hook that doesn't feel bolted on: factions form from what
-  people actually do, laws come from the leading faction, and the whole
-  subreddit shares the consequences.
+- A complete, polished game — not a slice — CI-green with **416 automated
+  tests**, including a full-loop end-to-end proof (role → actions → mission →
+  votes → day rollover) and property tests.
+- A React UI that reads like a *place*: a living skyline, a one-tap pledge, a
+  Dawn Report, and a survivor you build yourself — all crisp on mobile.
+- Reddit-native hook that doesn't feel bolted on: factions form from what people
+  actually do, laws come from the leading faction, and the whole subreddit shares
+  the consequences.
 - Deterministic, replayable resolver — retries can't fork reality.
+- Ships CSP-clean: fonts self-hosted, no external requests, no inline scripts.
 
 ---
 
@@ -149,19 +158,20 @@ food and power pressure.
 
 ## What's next for One More Dawn
 
-- Sound design and animation polish.
-- Comment-write integration for scout reports and council rallies — turn
-  in-game events into first-class Reddit posts and threads.
-- City-vs-city Olympics season mode.
+- Comment-write integration for scout reports and council rallies — turn in-game
+  events into first-class Reddit threads (today we bridge to comments with a
+  one-tap "copy scout report").
+- A cohesive custom icon set to replace the remaining emoji.
+- Marked portrait art with saved/lost states.
+- City-vs-city Olympics season mode on top of the World map.
 - Larger crisis pool and richer law effects.
-- Dedicated Council screen (the Dashboard council panel and Vote screen
-  strategy grid cover the mechanic for now).
 
 ---
 
 ## Built With
 
-Devvit, Devvit Web, Devvit Redis, Phaser 4, TypeScript, Hono, Vite, Node.js 22.
+Devvit, Devvit Web, Devvit Redis, **React**, Phaser 4, TypeScript, Hono, Vite,
+`@fontsource`, Node.js 22.
 
 ---
 
