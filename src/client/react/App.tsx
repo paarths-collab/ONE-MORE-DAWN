@@ -27,6 +27,8 @@ import {
   markedShortName,
 } from './defs';
 import type { Handlers } from './handlers';
+import { MuteButton } from './kit/MuteButton';
+import { sfx } from './kit/sound';
 import { ToastLayer, useToasts } from './kit/Toast';
 import { useFetch } from './kit/useFetch';
 import { CrisisScreen } from './screens/CrisisScreen';
@@ -109,6 +111,17 @@ export function App() {
     }
   }, [net, hookSeen, tourActive, tourDone]);
 
+  // Sunrise chime the first time the Dawn Report is available (once per open;
+  // silent if the browser blocks audio before any gesture — that's fine).
+  const dawnChimedRef = useRef(false);
+  useEffect(() => {
+    if (net.kind !== 'ready' || dawnSeen || dawnChimedRef.current) return;
+    if (net.data.firstVisitToday && net.data.dawnReport !== null) {
+      dawnChimedRef.current = true;
+      sfx.play('dawn');
+    }
+  }, [net, dawnSeen]);
+
   /**
    * A mutation failed. Roll the optimistic patch back to the snapshot captured
    * before it, THEN try to reconcile with the server. The rollback matters when
@@ -119,6 +132,7 @@ export function App() {
    */
   const rollback = useCallback(
     (snapshot: InitResponse | null, err: Error) => {
+      sfx.play('error');
       push(`⚠️ ${err.message}`);
       if (snapshot) setNet({ kind: 'ready', data: snapshot });
       refresh();
@@ -130,6 +144,7 @@ export function App() {
 
   const onPledge = useCallback(
     (kind: PledgeKind) => {
+      sfx.play('pledge');
       const current = dataRef.current;
       patch((d) => ({
         ...d,
@@ -164,6 +179,7 @@ export function App() {
 
   const onVote = useCallback(
     (optionId: string, crisisId: string) => {
+      sfx.play('vote');
       const snapshot = dataRef.current;
       patch((d) => ({
         ...d,
@@ -195,6 +211,7 @@ export function App() {
         return { ...d, strategyVotes: votes, yourStrategyVote: planId };
       });
       if (!accepted) return;
+      sfx.play('back');
       push('🏛️ You backed the plan');
       api
         .strategy(planId)
@@ -212,6 +229,7 @@ export function App() {
 
   const onAction = useCallback(
     (action: ActionType) => {
+      sfx.play('action');
       const snapshot = dataRef.current;
       const def = ACTION_DEFS.find((a) => a.id === action);
       patch((d) => ({
@@ -232,7 +250,10 @@ export function App() {
             effectiveEnergy: r.effectiveEnergy,
             yourActionsToday: r.yourActionsToday,
           }));
-          if (r.unlockedTitle !== null) push(`🎖️ Title unlocked — ${r.unlockedTitle}`);
+          if (r.unlockedTitle !== null) {
+            sfx.play('success');
+            push(`🎖️ Title unlocked — ${r.unlockedTitle}`);
+          }
         })
         .catch((err: Error) => rollback(snapshot, err));
     },
@@ -244,10 +265,14 @@ export function App() {
       api
         .chooseRole(role)
         .then((r) => {
+          sfx.play('success');
           patch((d) => ({ ...d, player: r.player }));
           push(`${ROLE_DEFS[role].icon} You are the ${ROLE_DEFS[role].name} now`);
         })
-        .catch((err: Error) => push(`⚠️ ${err.message}`));
+        .catch((err: Error) => {
+          sfx.play('error');
+          push(`⚠️ ${err.message}`);
+        });
     },
     [patch, push],
   );
@@ -258,11 +283,15 @@ export function App() {
       api
         .saveAvatar(avatar)
         .then((r) => {
+          sfx.play('success');
           patch((d) => ({ ...d, player: r.player }));
           setEditingAvatar(false);
           push(`☀️ Welcome, ${avatar.name}`);
         })
-        .catch((err: Error) => push(`⚠️ ${err.message}`))
+        .catch((err: Error) => {
+          sfx.play('error');
+          push(`⚠️ ${err.message}`);
+        })
         .finally(() => setSavingAvatar(false));
     },
     [patch, push],
@@ -287,9 +316,13 @@ export function App() {
             effectiveEnergy: r.effectiveEnergy,
             missionUsedToday: true,
           }));
+          sfx.play('mission');
           setMission({ start: r, threat });
         })
-        .catch((err: Error) => push(`⚠️ ${err.message}`));
+        .catch((err: Error) => {
+          sfx.play('error');
+          push(`⚠️ ${err.message}`);
+        });
     },
     [patch, push],
   );
@@ -299,7 +332,10 @@ export function App() {
       setMission(null);
       if (completed) {
         patch((d) => ({ ...d, player: completed.player }));
-        if (completed.unlockedTitle !== null) push(`🎖️ Title unlocked — ${completed.unlockedTitle}`);
+        if (completed.unlockedTitle !== null) {
+          sfx.play('success');
+          push(`🎖️ Title unlocked — ${completed.unlockedTitle}`);
+        }
         refresh(); // banked loot lands in the city aggregate — resync
       }
     },
@@ -472,6 +508,7 @@ export function App() {
             <div className="pxl-pill">
               ⚡ {vil?.onlineCount ?? '—'}/{vil?.totalCount ?? data.city.population}
             </div>
+            <MuteButton />
             <button
               type="button"
               className="pxl-pill"
