@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { UiResponse } from '@devvit/web/shared';
-import type { CityState, TimelineEntry } from '../../shared/types';
 import { createPost } from '../core/post';
+import { seedDemoCity } from '../game/demoSeed';
 import { newCityState, resolveDay, type DayInputs } from '../game/resolver';
 import { utcDateString } from '../game/lazyResolve';
 import { KEYS } from '../storage/redisKeys';
@@ -102,60 +102,23 @@ menu.post('/reset', async (c) => {
   );
 });
 
+/**
+ * Seed a rich, self-consistent mid-run city (see game/demoSeed.ts) so a judge or
+ * first visitor lands in a living Day-5 city under an imminent raid instead of
+ * an empty Day-1 board. Everything is written through the store the game reads;
+ * `reset` clears it.
+ */
 menu.post('/seed-demo', async (c) => {
   const store = getStore();
   const old = await store.getCityState();
   const cycle = old?.cycle ?? 1;
-
-  const demo: CityState = {
-    day: 5,
-    cycle,
-    status: 'alive',
-    worldSeed: deriveWorldSeed(),
-    trait: 'standard', // demo state is hand-built; keep it modifier-free
-    population: 143,
-    food: 22,
-    power: 31,
-    medicine: 7,
-    morale: 44,
-    threat: 68,
-    defense: 35,
-    crisisId: 'refugee_convoy',
-    activeLaw: null,
-    lawExpiresDay: 0,
-  };
-  await store.setCityState(demo);
-  await store.setCityMeta({
-    lastResolvedDate: utcDateString(new Date()),
-    schemaVersion: '1',
-  });
-
-  const day4Entry: TimelineEntry = {
-    day: 4,
-    cycle,
-    headline: 'Day 4: The city survived to see one more dawn.',
-    events: [
-      '12 citizen actions strengthened the city.',
-      'Engineers repaired the north generator; power held through the night.',
-      '2 expeditions returned: +6 food, +3 medicine, +4 scrap.',
-      'A scout was injured in the ruins beyond the wall.',
-      'The lights flicker. Darkness weighs on everyone.',
-    ],
-    deltas: {
-      food: -4,
-      power: -6,
-      medicine: 1,
-      morale: -5,
-      threat: 8,
-      population: -2,
-    },
-    crisisId: 'blackout_ward',
-    winningOptionId: 'a',
-  };
-  await store.appendTimeline(day4Entry);
-
+  await seedDemoCity(store, { cycle, worldSeed: deriveWorldSeed(), nowMs: Date.now() });
+  await store.setCityMeta({ lastResolvedDate: utcDateString(new Date()), schemaVersion: '1' });
   return c.json<UiResponse>(
-    { showToast: 'Demo state seeded: day 5, threat 68, refugee convoy at the gate.' },
+    {
+      showToast:
+        'Demo seeded: Day 5, 9 citizens, raid tomorrow, The Marked mid-rescue, votes & chronicle live.',
+    },
     200,
   );
 });
