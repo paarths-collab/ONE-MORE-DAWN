@@ -1,3 +1,4 @@
+import { navigateTo } from '@devvit/web/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CityStatusTag, WorldCity, WorldResponse } from '../../../shared/types';
 import { api } from '../../game/api';
@@ -37,10 +38,25 @@ const STATUS_ORDER: readonly CityStatusTag[] = [
 
 // ---------- navigation: every city is a real subreddit you can travel to ----------
 
-/** "r/meadowbrook" → https://www.reddit.com/r/meadowbrook (opened in a new tab). */
+/**
+ * Travel to a city = navigate the parent Reddit app to that subreddit. Inside a
+ * Devvit webview `window.open` is sandboxed and does nothing, so we use Devvit's
+ * `navigateTo`. In a plain browser (local dev/preview) navigateTo is a no-op, so
+ * we also try window.open as a fallback — one of the two fires per environment.
+ */
 function visitCity(subreddit: string): void {
   const path = subreddit.replace(/^\/?/, '');
-  window.open(`https://www.reddit.com/${path}`, '_blank', 'noopener');
+  const url = `https://www.reddit.com/${path}`;
+  try {
+    navigateTo(url);
+  } catch {
+    /* not inside a Devvit webview */
+  }
+  try {
+    window.open(url, '_blank', 'noopener');
+  } catch {
+    /* popups blocked (sandboxed iframe) */
+  }
 }
 
 /** "r/meadowbrook" → "meadowbrook"; caps length so map labels stay tidy. */
