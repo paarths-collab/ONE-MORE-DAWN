@@ -14,17 +14,22 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 export type BuildingMeta = { name: string; level: number; blurb: string };
 export type TimeOfDay = 'night' | 'dawn' | 'day' | 'dusk';
 export type CompanionKind = 'horse' | 'flamingo' | 'parrot' | 'stork';
+export type PoiInfo = { name: string; icon: string; level: number; blurb: string };
 
 export type VillageHooks = {
   onProgress: (pct: number) => void;
   onLoad: () => void;
   onSelect: (meta: BuildingMeta | null) => void;
+  /** Fired once after build with the full labeled-district directory. */
+  onPois?: (pois: PoiInfo[]) => void;
 };
 
 export type VillageHandle = {
   setTimeOfDay: (t: TimeOfDay) => void;
   setVillagers: (n: number) => void;
   setCompanion: (kind: CompanionKind, on: boolean) => void;
+  /** Fly the camera to a labeled district and select it. */
+  focusOn: (name: string) => void;
   dispose: () => void;
   pause: () => void;
   resume: () => void;
@@ -348,6 +353,21 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       const r = 24 + Math.sin(a * 3 + PHI1) * 3;
       roads.push(windingPath(Math.cos(a) * r, Math.sin(a) * r, Math.cos(a) * 7, Math.sin(a) * 7));
     }
+    // outer ring at ~33 (more streets = more houses, like the reference)
+    const ring2: [number, number][] = [];
+    const N2 = 30;
+    for (let i = 0; i <= N2; i++) {
+      const a = (i / N2) * Math.PI * 2;
+      const r = 33 + Math.sin(a * 4 + PHI2) * 2.5 + (rng() - 0.5) * 1.5;
+      ring2.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+    roads.push(ring2);
+    // connectors: outer ring → inner ring at 3 angles
+    for (const a of [1.3, 3.0, 4.6]) {
+      const r1 = 24 + Math.sin(a * 3 + PHI1) * 3;
+      const r2 = 33 + Math.sin(a * 4 + PHI2) * 2.5;
+      roads.push(windingPath(Math.cos(a) * r2, Math.sin(a) * r2, Math.cos(a) * r1, Math.sin(a) * r1));
+    }
   }
 
   const roadTiles = new Set<string>();
@@ -465,6 +485,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
 
   // ---------- interactables + labels ----------
   const interactables: THREE.Group[] = [];
+  const poiList: PoiInfo[] = [];
+  const poiMap = new Map<string, THREE.Group>();
   function register(group: THREE.Group, x: number, z: number, meta: BuildingMeta, ringR: number, label?: { icon: string; y: number }) {
     group.position.set(x, 0, z);
     group.userData = { ...meta };
@@ -489,6 +511,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       const obj = new CSS2DObject(el);
       obj.position.set(0, label.y, 0);
       group.add(obj);
+      poiList.push({ name: meta.name, icon: label.icon, level: meta.level, blurb: meta.blurb });
+      poiMap.set(meta.name, group);
     }
     scene.add(group);
     interactables.push(group);
@@ -719,7 +743,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
         const [x1, z1] = road[i]!;
         const [x2, z2] = road[i + 1]!;
         const len = Math.hypot(x2 - x1, z2 - z1);
-        const steps = Math.max(1, Math.floor(len / 2.4));
+        const steps = Math.max(1, Math.floor(len / 1.8));
         for (let s = 0; s < steps; s++) {
           const t = (s + 0.5) / steps;
           const x = x1 + (x2 - x1) * t;
@@ -737,9 +761,9 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       }
     }
     // interior in-fill blocks (the reference town is dense between roads too)
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 170; i++) {
       const a = rng() * Math.PI * 2;
-      const r = 8 + Math.sqrt(rng()) * 26;
+      const r = 8 + Math.sqrt(rng()) * 29;
       candidates.push([Math.cos(a) * r, Math.sin(a) * r, rng() * Math.PI * 2]);
     }
     // shuffle-ish deterministic order
@@ -748,8 +772,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
     }
     for (const [hx, hz, facing] of candidates) {
-      if (placed >= 96) break;
-      if (!insidePlateau(hx, hz, 8)) continue;
+      if (placed >= 150) break;
+      if (!insidePlateau(hx, hz, 7)) continue;
       // r=1 (3×3 tiles) fits the ~2-unit house footprint without swallowing the
       // roadside strip; occupy() below still reserves 5×5 so houses keep gaps.
       if (!isFree(hx, hz, 1)) continue;
@@ -1000,6 +1024,28 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   void setCompanionImpl('parrot', true);
   void setCompanionImpl('stork', true);
 
+  // publish the district directory to the React dashboard
+  hooks.onPois?.(poiList);
+
+  // ---------- camera fly-to (dashboard navigation) ----------
+  let fly: { tgt: THREE.Vector3; pos: THREE.Vector3 } | null = null;
+  function focusOn(name: string) {
+    const group = poiMap.get(name);
+    if (!group) return;
+    const tgt = new THREE.Vector3(group.position.x, 1.2, group.position.z);
+    // keep the current viewing azimuth; come in at a readable close distance
+    const dir = camera.position.clone().sub(controls.target);
+    dir.y = 0;
+    if (dir.lengthSq() < 1) dir.set(0.4, 0, 1);
+    dir.normalize();
+    const pos = tgt.clone().addScaledVector(dir, 24);
+    pos.y = 17;
+    fly = { tgt, pos };
+    setSelected(group);
+    const { name: n, level, blurb } = group.userData as BuildingMeta;
+    hooks.onSelect({ name: n, level, blurb });
+  }
+
   // ---------- hover / select ----------
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
@@ -1037,7 +1083,10 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     }
   };
   let downAt: [number, number] | null = null;
-  const onDown = (e: PointerEvent) => { downAt = [e.clientX, e.clientY]; };
+  const onDown = (e: PointerEvent) => {
+    fly = null; // grabbing the camera cancels any dashboard fly-to
+    downAt = [e.clientX, e.clientY];
+  };
   const onUp = (e: PointerEvent) => {
     if (!downAt) return;
     const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
@@ -1062,6 +1111,12 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
+    if (fly) {
+      const k = 1 - Math.exp(-dt * 3.2);
+      controls.target.lerp(fly.tgt, k);
+      camera.position.lerp(fly.pos, k);
+      if (camera.position.distanceTo(fly.pos) < 0.4) fly = null;
+    }
     controls.update();
     lerpEnv(dt);
     for (const a of actors) {
@@ -1092,6 +1147,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     setCompanion: (kind, on) => {
       void setCompanionImpl(kind, on);
     },
+    focusOn,
     pause: () => renderer.setAnimationLoop(null),
     resume: () => renderer.setAnimationLoop(tick),
     frame: () => tick(),

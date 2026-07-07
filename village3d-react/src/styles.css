@@ -46,6 +46,29 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 .toast { position: absolute; bottom: calc(100% + 10px); right: 0; border-radius: 10px; padding: 8px 12px; font-family: var(--pixel); font-size: 9px; letter-spacing: 0.5px; color: var(--ink); white-space: nowrap; opacity: 0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s; pointer-events: none; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(4px); }
 .toast.on { opacity: 1; transform: none; }
 
+/* ---- CITY dashboard (right) ---- */
+.dash-fab { top: 84px; right: 14px; font-family: var(--pixel); font-size: 10px; letter-spacing: 1.5px; color: var(--gold); padding: 10px 14px; border-radius: 12px; cursor: pointer; }
+.dash { top: 128px; right: 14px; width: 250px; max-height: calc(100vh - 220px); overflow-y: auto; border-radius: 16px; padding: 14px; opacity: 0; transform: translateX(12px); transition: opacity 0.25s, transform 0.25s; pointer-events: none !important; }
+.dash.on { opacity: 1; transform: none; pointer-events: auto !important; }
+.dash.on * { pointer-events: auto; }
+.dash::-webkit-scrollbar { width: 7px; }
+.dash::-webkit-scrollbar-thumb { background: #3a332c; border-radius: 6px; }
+.vits { display: flex; flex-direction: column; gap: 9px; }
+.vit .t { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.vit .k { font-family: var(--pixel); font-size: 8px; color: var(--mut); letter-spacing: 0.5px; }
+.vit .v { font-family: var(--mono); font-size: 12px; font-weight: 800; }
+.vit .v em { font-style: normal; font-size: 9px; color: var(--mut); }
+.vit .track { height: 8px; background: #14100b; border-radius: 5px; overflow: hidden; }
+.vit .track i { display: block; height: 100%; border-radius: 5px; transition: width 0.5s; }
+.districts { display: flex; flex-direction: column; gap: 6px; }
+.district { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: rgba(255, 255, 255, 0.03); border: 1px solid #2f2828; border-radius: 10px; padding: 8px 10px; cursor: pointer; transition: border-color 0.15s; color: var(--ink); font-family: var(--mono); }
+.district:hover { border-color: var(--line); }
+.district.on { border-color: var(--gold); background: rgba(232, 195, 74, 0.08); }
+.district .di { font-size: 15px; flex: none; }
+.district .dn2 { flex: 1; min-width: 0; font-family: var(--pixel); font-size: 8.5px; letter-spacing: 0.5px; color: var(--ink); }
+.district .dn2 i { font-style: normal; display: block; font-size: 7px; color: var(--mut); margin-top: 2px; }
+.district .go { color: var(--gold); font-size: 12px; flex: none; }
+
 /* ---- POI banner labels (CSS2DRenderer layer) ---- */
 .poi-layer { z-index: 3; }
 .poi-label { pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: var(--pixel); font-size: 8.5px; letter-spacing: 1px; color: var(--gold); background: rgba(20, 16, 13, 0.88); border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; white-space: nowrap; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5); transition: border-color 0.15s, color 0.15s; }
@@ -101,4 +124,6 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
   .chip { bottom: 64px; max-width: 260px; }
   .panel-fab { top: auto; bottom: 64px; left: 14px; }
   .panel { top: auto; bottom: 112px; left: 14px; width: min(236px, calc(100vw - 28px)); }
+  .dash-fab { top: auto; bottom: 64px; right: 84px; }
+  .dash { top: auto; bottom: 112px; right: 14px; width: min(250px, calc(100vw - 28px)); max-height: 55vh; }
 }

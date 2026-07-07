@@ -4,13 +4,14 @@ import {
   MAX_VILLAGERS,
   type BuildingMeta,
   type CompanionKind,
+  type PoiInfo,
   type TimeOfDay,
   type VillageHandle,
 } from './scene';
 
-// ONE MORE DAWN — 3D village, React edition v2. The scene (scene.ts) exposes a
-// live API; this file is the entire visible UI: canvas mount + HUD + the SCENE
-// control panel (time of day, villagers, companions) as real React state.
+// ONE MORE DAWN — 3D town, React edition v3. Left panel: SCENE (time of day,
+// villagers, companions). Right panel: CITY dashboard (vitals + the district
+// directory — click a district and the camera flies to it). All React state.
 
 const TIMES: { id: TimeOfDay; icon: string; label: string; tagline: string }[] = [
   { id: 'night', icon: '🌙', label: 'NIGHT', tagline: 'the city sleeps — dawn is coming' },
@@ -26,22 +27,37 @@ const COMPANIONS: { id: CompanionKind; icon: string; label: string }[] = [
   { id: 'stork', icon: '🕊️', label: 'STORK' },
 ];
 
+// Demo vitals in the game dashboard's style (static — this prototype is not
+// wired to the server).
+const VITALS: { k: string; icon: string; v: number; max: number; danger?: boolean }[] = [
+  { k: 'FOOD', icon: '🍞', v: 342, max: 500 },
+  { k: 'POWER', icon: '⚡', v: 78, max: 100 },
+  { k: 'MEDICINE', icon: '🩹', v: 12, max: 120 },
+  { k: 'MORALE', icon: '🙂', v: 44, max: 100 },
+  { k: 'THREAT', icon: '☠️', v: 68, max: 100, danger: true },
+  { k: 'DEFENSE', icon: '🛡️', v: 35, max: 100 },
+];
+const vitColor = (pct: number, danger = false): string =>
+  danger ? (pct >= 70 ? '#c85040' : pct >= 40 ? '#e8c34a' : '#57c06a') : pct < 25 ? '#c85040' : pct < 50 ? '#e8c34a' : '#57c06a';
+
 function VillageCanvas({
   onReady,
   onProgress,
   onLoad,
   onSelect,
+  onPois,
 }: {
   onReady: (h: VillageHandle) => void;
   onProgress: (pct: number) => void;
   onLoad: () => void;
   onSelect: (meta: BuildingMeta | null) => void;
+  onPois: (pois: PoiInfo[]) => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = mountRef.current;
     if (!el) return undefined;
-    const handle = createVillageScene(el, { onProgress, onLoad, onSelect });
+    const handle = createVillageScene(el, { onProgress, onLoad, onSelect, onPois });
     onReady(handle);
     return () => handle.dispose();
     // mount once — callbacks are stable (useCallback in App)
@@ -61,7 +77,7 @@ function TopBar() {
     <div className="hud topbar">
       <div className="title card-bit">
         <h1>THE LAST CITY</h1>
-        <div className="sub">3D village · React + three.js · not wired to the game</div>
+        <div className="sub">3D town · React + three.js · not wired to the game</div>
       </div>
       <div className="res">
         {RES.map(([icon, value]) => (
@@ -135,7 +151,6 @@ function ScenePanel({
                 setTime(t.id);
               }}
               aria-pressed={t.id === time}
-              title={t.label}
             >
               <span className="si">{t.icon}</span>
               {t.label}
@@ -170,6 +185,80 @@ function ScenePanel({
               aria-pressed={companions[c.id]}
             >
               {c.icon} {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CityDashboard({
+  open,
+  setOpen,
+  pois,
+  selectedName,
+  onVisit,
+}: {
+  open: boolean;
+  setOpen: (b: boolean) => void;
+  pois: PoiInfo[];
+  selectedName: string | null;
+  onVisit: (name: string) => void;
+}) {
+  return (
+    <>
+      <button type="button" className="hud dash-fab card-bit" onClick={() => setOpen(!open)} aria-expanded={open}>
+        ▦ CITY
+      </button>
+      <div className={open ? 'hud dash card-bit on' : 'hud dash card-bit'}>
+        <div className="p-head">
+          <span>CITY</span>
+          <button type="button" className="p-x" onClick={() => setOpen(false)} aria-label="Close dashboard">
+            ✕
+          </button>
+        </div>
+
+        <div className="p-sec">CITY VITALS</div>
+        <div className="vits">
+          {VITALS.map((r) => {
+            const pct = Math.min(100, (r.v / r.max) * 100);
+            const col = vitColor(pct, r.danger);
+            return (
+              <div key={r.k} className="vit">
+                <div className="t">
+                  <span className="k">
+                    {r.icon} {r.k}
+                  </span>
+                  <span className="v" style={{ color: col }}>
+                    {r.v}
+                    <em>/{r.max}</em>
+                  </span>
+                </div>
+                <div className="track">
+                  <i style={{ width: `${pct}%`, background: col }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-sec">DISTRICTS — TAP TO VISIT</div>
+        <div className="districts">
+          {pois.map((p) => (
+            <button
+              key={p.name}
+              type="button"
+              className={selectedName === p.name ? 'district on' : 'district'}
+              onClick={() => onVisit(p.name)}
+              title={p.blurb}
+            >
+              <span className="di">{p.icon}</span>
+              <span className="dn2">
+                {p.name}
+                <i>LVL {p.level}</i>
+              </span>
+              <span className="go">→</span>
             </button>
           ))}
         </div>
@@ -240,9 +329,10 @@ export function App() {
   const [pct, setPct] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<BuildingMeta | null>(null);
+  const [pois, setPois] = useState<PoiInfo[]>([]);
   const [time, setTimeState] = useState<TimeOfDay>('dawn');
   const [auto, setAuto] = useState(false);
-  const [villagers, setVillagersState] = useState(3);
+  const [villagers, setVillagersState] = useState(4);
   const [companions, setCompanions] = useState<Record<CompanionKind, boolean>>({
     horse: true,
     flamingo: true,
@@ -250,6 +340,7 @@ export function App() {
     stork: true,
   });
   const [panelOpen, setPanelOpen] = useState(true);
+  const [dashOpen, setDashOpen] = useState(true);
   const handleRef = useRef<VillageHandle | null>(null);
 
   const onReady = useCallback((h: VillageHandle) => {
@@ -258,6 +349,7 @@ export function App() {
   const onProgress = useCallback((p: number) => setPct(p), []);
   const onLoad = useCallback(() => setLoaded(true), []);
   const onSelect = useCallback((meta: BuildingMeta | null) => setSelected(meta), []);
+  const onPois = useCallback((list: PoiInfo[]) => setPois(list), []);
 
   const setTime = useCallback((t: TimeOfDay) => {
     setTimeState(t);
@@ -280,6 +372,10 @@ export function App() {
     (Object.keys(companions) as CompanionKind[]).forEach((k) => h.setCompanion(k, companions[k]));
   }, [companions, loaded]);
 
+  const visitDistrict = useCallback((name: string) => {
+    handleRef.current?.focusOn(name);
+  }, []);
+
   // AUTO: the day slowly turns — night → dawn → day → dusk, ~12s per phase.
   useEffect(() => {
     if (!auto) return undefined;
@@ -296,7 +392,7 @@ export function App() {
 
   return (
     <>
-      <VillageCanvas onReady={onReady} onProgress={onProgress} onLoad={onLoad} onSelect={onSelect} />
+      <VillageCanvas onReady={onReady} onProgress={onProgress} onLoad={onLoad} onSelect={onSelect} onPois={onPois} />
       <TopBar />
       <DayPill time={time} auto={auto} />
       <ScenePanel
@@ -311,9 +407,16 @@ export function App() {
         companions={companions}
         toggleCompanion={toggleCompanion}
       />
+      <CityDashboard
+        open={dashOpen}
+        setOpen={setDashOpen}
+        pois={pois}
+        selectedName={selected?.name ?? null}
+        onVisit={visitDistrict}
+      />
       <BuildingChip meta={selected} />
       <BuildDock />
-      <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a building</div>
+      <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a district</div>
       <Loader pct={pct} done={loaded} />
     </>
   );
