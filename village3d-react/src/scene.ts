@@ -26,6 +26,8 @@ export type VillageHooks = {
   onChat?: (who: string, text: string) => void;
   /** Fired after build-mode places a hut at snapped tile (x, z). */
   onBuilt?: (x: number, z: number) => void;
+  /** Fired when a villager is tapped (their u/name) — or null on an empty tap. */
+  onVillager?: (name: string | null) => void;
 };
 
 export type VillageHandle = {
@@ -40,6 +42,10 @@ export type VillageHandle = {
   pulseMarked: () => void;
   /** Speech-bubble a line (5s) over a random villager — or the gate guard if none walk. */
   say: (text: string) => void;
+  /** Speech-bubble a line (5s) over a specific named villager (falls back like `say`). */
+  sayTo: (name: string, text: string) => void;
+  /** Make a named villager stop, face the camera, and wave for ~2.6s. */
+  waveAt: (name: string) => void;
   /** Toggle hut-placement mode: ghost hut follows the pointer; tap a valid tile to build. */
   setBuildMode: (on: boolean) => void;
   /** One-shot golden ring flash + scale pop on a labeled district. */
@@ -51,6 +57,9 @@ export type VillageHandle = {
 };
 
 export const MAX_VILLAGERS = 8;
+
+// persistent villager identities, assigned by spawn index (pool size == MAX_VILLAGERS)
+const VILLAGER_NAMES = ['u/ashen_fox', 'u/quiet_marrow', 'u/saltcedar', 'u/brackenwren', 'u/palewick', 'u/mx_ember', 'u/dawn_keeper', 'u/gate_runner'];
 
 // ---------- seeded rng ----------
 const makeRng = (seed: number) => {
@@ -940,10 +949,20 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     obj: THREE.Object3D;
     mixer: THREE.AnimationMixer;
     walker?: (dt: number) => void;
+    name?: string;
+    // wave greeting: seconds remaining + the actions we crossfade between + tap target
+    waveT?: number;
+    walkAction?: THREE.AnimationAction;
+    idleAction?: THREE.AnimationAction;
+    hitProxy?: THREE.Mesh;
     // lazy speech-bubble kit (created on first showBubble)
     bubbleEl?: HTMLDivElement;
     bubbleObj?: CSS2DObject;
-    bubbleTimer?: number;
+    bubbleTimer?: number | undefined;
+    // lazy name tag (created on first wave), styled by .v-name / .v-name.on
+    nameEl?: HTMLDivElement;
+    nameObj?: CSS2DObject;
+    nameTimer?: number | undefined;
   };
   const actors = new Set<Actor>();
   const orbiters = new Map<CompanionKind, { actor: Actor; radius: number; height: number; speed: number; phase: number }>();
@@ -1016,6 +1035,14 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   let guard: Actor | null = null;
   let wantedVillagers = 4;
 
+  // invisible tap targets: skinned-mesh raycasts are unreliable, so each villager
+  // carries a fat hidden cylinder instead (Mesh.raycast ignores material.visible —
+  // same trick as the build-mode groundPlane below)
+  const hitGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.2, 6);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const villagerHits = new Map<THREE.Object3D, Actor>();
+  const villagerProxies: THREE.Mesh[] = [];
+
   async function syncVillagers() {
     const gltf = await loadGlb('Soldier.glb');
     if (disposed) return;
@@ -1044,14 +1071,33 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       humanize(v);
       scene.add(v);
       const mixer = new THREE.AnimationMixer(v);
-      mixer.clipAction(clip(/walk/i, 3)).play();
+      const walkAction = mixer.clipAction(clip(/walk/i, 3));
+      const idleAction = mixer.clipAction(clip(/idle/i, 0));
+      walkAction.play();
+      const proxy = new THREE.Mesh(hitGeo, hitMat);
+      proxy.position.set(0, 1.1, 0);
+      v.add(proxy);
       const route = ROUTES[idx % ROUTES.length]!;
-      const actor: Actor = { obj: v, mixer, walker: makeWalker(v, route.pts, route.speed) };
+      const actor: Actor = {
+        obj: v,
+        mixer,
+        walker: makeWalker(v, route.pts, route.speed),
+        name: VILLAGER_NAMES[idx % VILLAGER_NAMES.length]!,
+        walkAction,
+        idleAction,
+        hitProxy: proxy,
+      };
+      villagerHits.set(proxy, actor);
+      villagerProxies.push(proxy);
       villagers.push(actor);
       actors.add(actor);
     }
     while (villagers.length > wantedVillagers) {
       const actor = villagers.pop()!;
+      if (actor.hitProxy) {
+        villagerHits.delete(actor.hitProxy);
+        villagerProxies.splice(villagerProxies.indexOf(actor.hitProxy), 1);
+      }
       scene.remove(actor.obj);
       actors.delete(actor);
     }
@@ -1134,22 +1180,66 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     'one more dawn, friends',
     'trade rumors from r/ironhollow…',
   ];
-  const CHAT_USERS = ['u/ashen_fox', 'u/quiet_marrow', 'u/saltcedar', 'u/brackenwren', 'u/palewick', 'u/mx_ember'];
   let chatIdx = 0;
   const chatTimer = window.setInterval(() => {
     if (villagers.length === 0) return;
     const v = villagers[Math.floor(rng() * villagers.length)]!;
     const text = CHATTER[chatIdx % CHATTER.length]!;
-    const who = CHAT_USERS[chatIdx % CHAT_USERS.length]!;
     chatIdx++;
     showBubble(v, text, 4);
-    hooks.onChat?.(who, text);
+    hooks.onChat?.(v.name!, text); // the speaker's own name — villagers are always named
   }, 9000);
 
   function say(text: string) {
     const speaker = villagers.length > 0 ? villagers[Math.floor(rng() * villagers.length)]! : guard;
     if (!speaker) return;
     showBubble(speaker, text, 5); // no onChat echo — the HUD adds its own row
+  }
+
+  function sayTo(name: string, text: string) {
+    const speaker = villagers.find((a) => a.name === name)
+      ?? (villagers.length > 0 ? villagers[Math.floor(rng() * villagers.length)]! : guard);
+    if (!speaker) return;
+    showBubble(speaker, text, 5);
+  }
+
+  // name tag: second CSS2D element above the bubble, shown while greeting (~4s).
+  // CSS2DRenderer owns these elements' inline transform — visibility is class-only.
+  function showNameTag(actor: Actor) {
+    if (!actor.name) return;
+    if (!actor.nameEl) {
+      const el = document.createElement('div');
+      el.className = 'v-name';
+      el.textContent = actor.name;
+      const obj = new CSS2DObject(el);
+      obj.position.set(0, 2.75, 0); // above the bubble
+      actor.obj.add(obj);
+      actor.nameEl = el;
+      actor.nameObj = obj;
+    }
+    actor.nameEl.classList.add('on');
+    if (actor.nameTimer !== undefined) window.clearTimeout(actor.nameTimer);
+    actor.nameTimer = window.setTimeout(() => {
+      actor.nameEl?.classList.remove('on');
+      actor.nameTimer = undefined;
+    }, 4000);
+  }
+
+  // wave greeting: Soldier.glb has no wave clip (Idle/Run/TPose/Walk), so fake it —
+  // crossfade walk→idle, then tick() faces the camera + hops/sways until waveT runs out
+  function startWave(actor: Actor) {
+    if (!actor.waveT) {
+      actor.walkAction?.fadeOut(0.2);
+      actor.idleAction?.reset().fadeIn(0.2).play();
+    }
+    actor.waveT = 2.6;
+    showBubble(actor, '👋', 2.5);
+    showNameTag(actor);
+  }
+
+  function waveAt(name: string) {
+    const v = villagers.find((a) => a.name === name);
+    if (v) startWave(v);
   }
 
   // publish the district directory to the React dashboard
@@ -1205,6 +1295,15 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(interactables, true)[0];
     return hit ? rootOf(hit.object) : null;
+  };
+  /** Pointer → villager via the invisible hit proxies (null if none under it). */
+  const pickVillager = (clientX: number, clientY: number): Actor | null => {
+    if (villagerProxies.length === 0) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(villagerProxies, false)[0];
+    return hit ? (villagerHits.get(hit.object) ?? null) : null;
   };
   const setRingVis = (group: THREE.Group | null, on: boolean) => {
     const ring = group?.userData.ring as THREE.Mesh | undefined;
@@ -1276,6 +1375,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       if (hovered) setRingVis(hovered, true);
       renderer.domElement.style.cursor = hovered ? 'pointer' : 'grab';
     }
+    // villagers hover too (no ring — just the pointer cursor over a hit proxy)
+    if (!hovered) renderer.domElement.style.cursor = pickVillager(e.clientX, e.clientY) ? 'pointer' : 'grab';
   };
   let downAt: [number, number] | null = null;
   const onDown = (e: PointerEvent) => {
@@ -1298,6 +1399,13 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       }
       return;
     }
+    // villagers take tap priority over buildings: greet + notify the HUD
+    const tapped = pickVillager(e.clientX, e.clientY);
+    if (tapped) {
+      startWave(tapped);
+      hooks.onVillager?.(tapped.name ?? null);
+      return;
+    }
     const g = pick(e.clientX, e.clientY);
     setSelected(g);
     if (g) {
@@ -1305,6 +1413,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       hooks.onSelect({ name, level, blurb });
     } else {
       hooks.onSelect(null);
+      hooks.onVillager?.(null);
     }
   };
   renderer.domElement.addEventListener('pointermove', onMove);
@@ -1343,6 +1452,23 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     lerpEnv(dt);
     for (const a of actors) {
       a.mixer.update(dt);
+      // wave greeting: pause the walk, face the camera, hop + sway until waveT runs out
+      if (a.waveT !== undefined && a.waveT > 0) {
+        a.waveT -= dt;
+        if (a.waveT <= 0) {
+          a.waveT = 0;
+          a.obj.position.y = 0;
+          a.obj.rotation.z = 0;
+          a.idleAction?.fadeOut(0.2);
+          a.walkAction?.reset().fadeIn(0.2).play();
+        } else {
+          const w = 2.6 - a.waveT; // elapsed wave time
+          a.obj.rotation.y = Math.atan2(camera.position.x - a.obj.position.x, camera.position.z - a.obj.position.z);
+          a.obj.position.y = Math.abs(Math.sin(w * 7)) * 0.14;
+          a.obj.rotation.z = Math.sin(w * 10) * 0.08;
+          continue; // walker must not run this frame
+        }
+      }
       a.walker?.(dt);
     }
     for (const [, o] of orbiters) {
@@ -1424,6 +1550,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       markedPulseT = 0; // restart the vigil pulse (retriggerable)
     },
     say,
+    sayTo,
+    waveAt,
     setBuildMode,
     flashDistrict,
     pause: () => renderer.setAnimationLoop(null),
@@ -1435,6 +1563,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       window.clearInterval(chatTimer);
       for (const a of actors) {
         if (a.bubbleTimer !== undefined) window.clearTimeout(a.bubbleTimer);
+        if (a.nameTimer !== undefined) window.clearTimeout(a.nameTimer);
       }
       ro.disconnect();
       window.removeEventListener('resize', size);
