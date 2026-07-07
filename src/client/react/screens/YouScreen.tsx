@@ -3,6 +3,7 @@ import type { InitResponse, Role } from '../../../shared/types';
 import { GENDER_META } from '../../../shared/avatar';
 import { ACTION_DEFS, FACTION_DEFS, ROLE_DEFS, ROLE_IDS, ROUTE_DEFS } from '../defs';
 import type { Handlers } from '../handlers';
+import { GameIcon } from '../kit/GameIcon';
 import { Avatar } from './HomeScreen';
 
 // YOU — the citizen file, pixel command-console skin. Identity header, the role
@@ -206,7 +207,7 @@ function ActionsToday({ data, handlers }: { data: InitResponse; handlers: Handle
       </div>
       {outOfEnergy && (
         <div className="pxl-rnote" style={{ marginBottom: 11 }}>
-          🌅 You&rsquo;ve given all you had today — the city rests easier for it. Energy returns at dawn.
+          <GameIcon id="dawn" size={13} /> You&rsquo;ve given all you had today — the city rests easier for it. Energy returns at dawn.
         </div>
       )}
       <div className="pxl-act-grid">
@@ -255,7 +256,7 @@ function Expedition({ data, handlers }: { data: InitResponse; handlers: Handlers
       </div>
       {missionUsedToday ? (
         <div className="pxl-rnote">
-          🎒 Your expedition is underway. The team returns with the haul at dawn. One run per citizen
+          <GameIcon id="expedition" size={13} /> Your expedition is underway. The team returns with the haul at dawn. One run per citizen
           per day.
         </div>
       ) : routes ? (
@@ -284,7 +285,7 @@ function Expedition({ data, handlers }: { data: InitResponse; handlers: Handlers
       ) : (
         <>
           <div className="pxl-rnote" style={{ marginBottom: 11 }}>
-            🎒 Send yourself into the ruins for food, medicine and scrap. Deeper means richer crates
+            <GameIcon id="expedition" size={13} /> Send yourself into the ruins for food, medicine and scrap. Deeper means richer crates
             and thinner air.
           </div>
           <button
@@ -293,7 +294,7 @@ function Expedition({ data, handlers }: { data: InitResponse; handlers: Handlers
             disabled={energyLeft <= 0 || resolving}
             onClick={() => setRoutes(true)}
           >
-            🎒 Launch Expedition
+            <GameIcon id="expedition" size={15} /> Launch Expedition
           </button>
         </>
       )}

@@ -1,6 +1,7 @@
 import type { InitResponse, StrategyPlanId } from '../../../shared/types';
 import { PLAN_DEFS, PLAN_IDS, formatDelta } from '../defs';
 import type { Handlers } from '../handlers';
+import { GameIcon } from '../kit/GameIcon';
 
 // CRISIS — the decisions screen, pixel command console. Today's moral crisis
 // vote (api.vote) and the council strategy vote (api.strategy). Both are
@@ -17,7 +18,7 @@ function CrisisVote({ data, handlers }: { data: InitResponse; handlers: Handlers
       <div className="pxl-phead">
         <span className="lbl">{crisis.title}</span>
         <span className="meta">
-          ⚔️ {total} vote{total === 1 ? '' : 's'} · dawn
+          <GameIcon id="crisis" size={11} /> {total} vote{total === 1 ? '' : 's'} · dawn
         </span>
       </div>
       <p style={{ fontSize: 12, color: 'var(--mut)', margin: '0 0 12px', lineHeight: 1.5 }}>{crisis.narrative}</p>

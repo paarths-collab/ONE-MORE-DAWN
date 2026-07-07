@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CityStatusTag, WorldCity, WorldResponse } from '../../../shared/types';
 import { api } from '../../game/api';
 import { MEDALS, WORLD_STATUS_DEFS } from '../defs';
+import { GameIcon } from '../kit/GameIcon';
+import type { GameIconId } from '../kit/GameIcon';
 
 // WORLD — Plan 2's tribal engine, pixel command-console skin. Every subreddit
 // is a ranked city; the cross-sub standings make a community go "we need to
@@ -16,16 +18,16 @@ type WorldSort = 'dawns' | 'saved' | 'souls';
 
 type SortDef = {
   id: WorldSort;
-  icon: string;
+  icon: GameIconId;
   label: string;
   unit: string;
   value: (c: WorldCity) => number;
 };
 
 const SORT_DEFS: readonly SortDef[] = [
-  { id: 'dawns', icon: '🌅', label: 'LONGEST DAWN', unit: 'dawns', value: (c) => c.survivalDays },
-  { id: 'saved', icon: '🕯️', label: 'MOST SAVED', unit: 'saved', value: (c) => c.savedCount },
-  { id: 'souls', icon: '👥', label: 'BIGGEST', unit: 'souls', value: (c) => c.population },
+  { id: 'dawns', icon: 'dawn', label: 'LONGEST DAWN', unit: 'dawns', value: (c) => c.survivalDays },
+  { id: 'saved', icon: 'candle', label: 'MOST SAVED', unit: 'saved', value: (c) => c.savedCount },
+  { id: 'souls', icon: 'population', label: 'BIGGEST', unit: 'souls', value: (c) => c.population },
 ];
 
 const STATUS_ORDER: readonly CityStatusTag[] = [
@@ -421,7 +423,9 @@ function WorldBody({ data }: { data: WorldResponse }) {
           </div>
           {taunt !== null && (
             <div className="pxl-rnote" style={{ marginTop: 4 }}>
-              <span aria-hidden="true">⚔️</span>
+              <span aria-hidden="true">
+                <GameIcon id="crisis" size={13} />
+              </span>
               <span>{taunt}</span>
             </div>
           )}
@@ -478,7 +482,9 @@ function WorldBody({ data }: { data: WorldResponse }) {
               onClick={() => setSort(s.id)}
               aria-pressed={s.id === sort}
             >
-              <span aria-hidden="true">{s.icon}</span>
+              <span aria-hidden="true">
+                <GameIcon id={s.icon} size={12} />
+              </span>
               {s.label}
             </button>
           ))}

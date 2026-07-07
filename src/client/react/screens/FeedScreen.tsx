@@ -1,6 +1,7 @@
 import type { InitResponse, TimelineResponse } from '../../../shared/types';
 import { api } from '../../game/api';
 import { DRAMA_TINTS, MEDALS, formatDelta, markedGoalWord, markedPct, markedShortName } from '../defs';
+import { GameIcon } from '../kit/GameIcon';
 import { useFetch } from '../kit/useFetch';
 
 // FEED — the full Live Drama Feed plus the pledge ledger (public credit:
@@ -50,7 +51,9 @@ function PledgeLedger({ data }: { data: InitResponse }) {
       </div>
 
       <div className="pxl-schip">
-        <span aria-hidden="true">🕯️</span>
+        <span aria-hidden="true">
+          <GameIcon id="candle" size={13} />
+        </span>
         {pledge.usedToday ? (
           <span>You pledged today — your name is on the ledger.</span>
         ) : (

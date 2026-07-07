@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { GameIcon } from '../kit/GameIcon';
 
 // ONBOARDING — the 10-second hook splash (first thing a brand-new player sees)
 // and the 3-tap guided tour (spotlight coachmarks) that runs once they land on
@@ -36,7 +37,7 @@ export function HookSplash({ onBegin }: { onBegin: () => void }) {
           ))}
         </div>
         <button type="button" className="pxl-btn" onClick={onBegin}>
-          ☀️ Begin — build your survivor
+          <GameIcon id="dawn" size={15} /> Begin — build your survivor
         </button>
         <div className="pxl-hook-foot">Async multiplayer · every citizen is a real redditor</div>
       </div>

@@ -12,6 +12,8 @@ import {
   ROUTE_DEFS,
 } from '../defs';
 import type { Handlers } from '../handlers';
+import { GameIcon } from '../kit/GameIcon';
+import type { StatIconId } from '../kit/GameIcon';
 import { CitySky, cityMood } from './CitySky';
 import { MarkedPortrait } from './markedArt';
 
@@ -110,7 +112,9 @@ function MarkedCard({ data, handlers }: { data: InitResponse; handlers: Handlers
       </div>
       {pledge.usedToday ? (
         <div className="pxl-pledge-done">
-          <span aria-hidden="true">🕯️</span>
+          <span aria-hidden="true">
+            <GameIcon id="candle" size={14} />
+          </span>
           <span>
             You&rsquo;ve helped today — {short} is {pct}% {goalWord}. Come back at dawn.
           </span>
@@ -141,7 +145,8 @@ function Stats({ data, village }: { data: InitResponse; village: VillageResponse
     <div className="pxl-stat-grid">
       <div className="pxl-stat card">
         <div className="top">
-          👥<span className="lbl">Citizens</span>
+          <GameIcon id="population" size={14} />
+          <span className="lbl">Citizens</span>
         </div>
         <div className="big">{total}</div>
         <div className="sub" style={{ color: 'var(--green)' }}>
@@ -150,7 +155,8 @@ function Stats({ data, village }: { data: InitResponse; village: VillageResponse
       </div>
       <div className="pxl-stat card">
         <div className="top">
-          ⚡<span className="lbl">Online</span>
+          <GameIcon id="power" size={14} />
+          <span className="lbl">Online</span>
         </div>
         <div className="big">{online}</div>
         <div className="sub" style={{ color: 'var(--mut)' }}>
@@ -159,7 +165,8 @@ function Stats({ data, village }: { data: InitResponse; village: VillageResponse
       </div>
       <div className="pxl-stat card">
         <div className="top">
-          ☠️<span className="lbl">Threat</span>
+          <GameIcon id="threat" size={14} />
+          <span className="lbl">Threat</span>
         </div>
         <div className="big">{city.threat}</div>
         <div className="sub" style={{ color: data.raidInDays <= 1 ? 'var(--danger)' : 'var(--mut)' }}>
@@ -168,7 +175,8 @@ function Stats({ data, village }: { data: InitResponse; village: VillageResponse
       </div>
       <div className="pxl-stat card" data-tour="dawn">
         <div className="top">
-          🌅<span className="lbl">Survival</span>
+          <GameIcon id="dawn" size={14} />
+          <span className="lbl">Survival</span>
         </div>
         <div className="big">{data.standing.survivalDays}</div>
         <div className="sub" style={{ color: 'var(--mut)' }}>
@@ -186,13 +194,13 @@ const VIT_COLOR = (pct: number, danger = false): string =>
 
 function Vitals({ data }: { data: InitResponse }) {
   const { city } = data;
-  const rows: [keyof typeof city, string, string, number, number, boolean][] = [
-    ['food', 'FOOD', '🍞', city.food, 300, false],
-    ['power', 'POWER', '⚡', city.power, 100, false],
-    ['medicine', 'MEDICINE', '🩹', city.medicine, 120, false],
-    ['morale', 'MORALE', '🙂', city.morale, 100, false],
-    ['threat', 'THREAT', '☠️', city.threat, 100, true],
-    ['defense', 'DEFENSE', '🛡️', city.defense, 100, false],
+  const rows: [StatIconId & keyof typeof city, string, number, number, boolean][] = [
+    ['food', 'FOOD', city.food, 300, false],
+    ['power', 'POWER', city.power, 100, false],
+    ['medicine', 'MEDICINE', city.medicine, 120, false],
+    ['morale', 'MORALE', city.morale, 100, false],
+    ['threat', 'THREAT', city.threat, 100, true],
+    ['defense', 'DEFENSE', city.defense, 100, false],
   ];
   // Flash a value when it changes at dawn (prev render's city compared).
   const prevCity = usePrev(city);
@@ -205,7 +213,7 @@ function Vitals({ data }: { data: InitResponse }) {
         </span>
       </div>
       <div className="pxl-vit-grid">
-        {rows.map(([field, k, ic, v, max, danger]) => {
+        {rows.map(([field, k, v, max, danger]) => {
           const p = (v / max) * 100;
           const col = VIT_COLOR(p, danger);
           const changed = prevCity !== undefined && prevCity[field] !== v;
@@ -213,7 +221,7 @@ function Vitals({ data }: { data: InitResponse }) {
             <div key={k} className="pxl-vit">
               <div className="t">
                 <span className="k">
-                  {ic} {k}
+                  <GameIcon id={field} size={10} /> {k}
                 </span>
                 <span
                   key={changed ? `${v}` : undefined}
@@ -241,12 +249,12 @@ function Vitals({ data }: { data: InitResponse }) {
  *  plus the city's starting trait and any active law (otherwise never shown). */
 function Situation({ data }: { data: InitResponse }) {
   const { forecast, city, trait, activeLaw, raidInDays } = data;
-  const rows: [string, string, number, number, boolean][] = [
-    ['Food', '🍞', city.food, forecast.food, false],
-    ['Power', '⚡', city.power, forecast.power, false],
-    ['Medicine', '🩹', city.medicine, forecast.medicine, false],
-    ['Morale', '🙂', city.morale, forecast.morale, false],
-    ['Threat', '☠️', city.threat, forecast.threat, true],
+  const rows: [string, StatIconId, number, number, boolean][] = [
+    ['Food', 'food', city.food, forecast.food, false],
+    ['Power', 'power', city.power, forecast.power, false],
+    ['Medicine', 'medicine', city.medicine, forecast.medicine, false],
+    ['Morale', 'morale', city.morale, forecast.morale, false],
+    ['Threat', 'threat', city.threat, forecast.threat, true],
   ];
   const raidSoon = raidInDays <= 1 || forecast.raidLikely;
   return (
@@ -291,7 +299,7 @@ function Situation({ data }: { data: InitResponse }) {
           return (
             <div key={k} className="pxl-fc">
               <span className="k">
-                {ic} {k}
+                <GameIcon id={ic} size={10} /> {k}
               </span>
               <span className="v">
                 <span style={{ color: 'var(--mut)' }}>{now}</span>
@@ -309,7 +317,9 @@ function Situation({ data }: { data: InitResponse }) {
         })}
       </div>
       <div className="pxl-rnote" style={{ marginTop: 11 }}>
-        <span aria-hidden="true">🌅</span>
+        <span aria-hidden="true">
+          <GameIcon id="dawn" size={13} />
+        </span>
         <span>This is the city with zero help today. Your actions bend it — come back at dawn to see how far.</span>
       </div>
     </div>
@@ -382,7 +392,7 @@ function YourTurn({ data, handlers }: { data: InitResponse; handlers: Handlers }
       </div>
       {missionUsedToday ? (
         <button type="button" className="pxl-btn ghost" disabled>
-          🎒 Expedition sent — returns at dawn
+          <GameIcon id="expedition" size={15} /> Expedition sent — returns at dawn
         </button>
       ) : routes ? (
         <div className="pxl-act-grid" style={{ marginTop: 11, gridTemplateColumns: '1fr 1fr 1fr' }}>
@@ -407,7 +417,7 @@ function YourTurn({ data, handlers }: { data: InitResponse; handlers: Handlers }
         </div>
       ) : (
         <button type="button" className="pxl-btn ghost" disabled={energyLeft <= 0} onClick={() => setRoutes(true)}>
-          🎒 Launch Expedition
+          <GameIcon id="expedition" size={15} /> Launch Expedition
         </button>
       )}
     </div>
@@ -501,7 +511,9 @@ function CrisisPeek({ data, go }: { data: InitResponse; go: (tab: Tab) => void }
   const total = crisis.options.reduce((s, o) => s + (crisisVotes[o.id] ?? 0), 0);
   return (
     <button type="button" className="pxl-opt" style={{ marginBottom: 0 }} data-tour="crisis" onClick={() => go('crisis')}>
-      <span className="oi">⚔️</span>
+      <span className="oi" aria-hidden="true">
+        <GameIcon id="crisis" size={22} />
+      </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span className="on">{crisis.title}</span>
         <span className="oe">

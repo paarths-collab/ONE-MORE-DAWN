@@ -1,4 +1,5 @@
 import type { Villager } from '../../../shared/types';
+import { GameIcon } from '../kit/GameIcon';
 import { Avatar } from './HomeScreen';
 
 // CITIZEN FILE — the masked profile of a fellow survivor. Shown in the laptop
@@ -50,10 +51,11 @@ export function CitizenFile({
         </div>
       </div>
       <button type="button" className="pxl-wave" onClick={onWave}>
-        📣 SEND A WAVE
+        <GameIcon id="wave" size={15} /> SEND A WAVE
       </button>
       <div className="pxl-rnote">
-        🔒 A wave greets them in the comments — presence only, no DMs, no real location.
+        <GameIcon id="lock" size={13} /> A wave greets them in the comments — presence only, no DMs,
+        no real location.
       </div>
     </>
   );
