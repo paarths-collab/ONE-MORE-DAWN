@@ -126,6 +126,39 @@ const ROUTES: { id: RouteId; icon: string; title: string; blurb: string; dur: nu
   { id: 'desperate', icon: '☠️', title: 'Desperate Dive', blurb: '9 crates · deadly, richer loot', dur: 25000, food: 27 },
 ];
 
+// SUBREDDIT CONTRIBUTIONS — community members buy houses in the 3D town and
+// gift resources; everything lands on the TOP 🏆 leaderboard tab.
+const SUB_USERS = ['u/ashen_fox', 'u/quiet_marrow', 'u/saltcedar', 'u/brackenwren', 'u/palewick', 'u/mx_ember', 'u/dawn_keeper', 'u/gate_runner', 'u/tinder_witch', 'u/rustle_creek', 'u/norwind', 'u/old_lantern'];
+
+type Contrib = { houses: number; food: number; power: number; medicine: number; score: number };
+type ContribPatch = Partial<Omit<Contrib, 'score'>>;
+
+const contribScore = (c: Omit<Contrib, 'score'>): number => c.houses * 10 + c.food + c.power * 2 + c.medicine * 2;
+const mkContrib = (houses: number, food: number, power: number, medicine: number): Contrib => ({
+  houses,
+  food,
+  power,
+  medicine,
+  score: contribScore({ houses, food, power, medicine }),
+});
+// seeded numbers only — these houses are "already in town", never placed in 3D
+const START_CONTRIBS: Record<string, Contrib> = {
+  'u/ashen_fox': mkContrib(2, 6, 1, 0), // 28
+  'u/saltcedar': mkContrib(1, 4, 0, 3), // 20
+  'u/quiet_marrow': mkContrib(0, 9, 2, 0), // 13
+  'u/tinder_witch': mkContrib(0, 3, 1, 1), // 7
+  'u/you': mkContrib(0, 0, 0, 0), // the player climbs from zero
+};
+
+// resource gifts the simulation can pick — vital key + contrib key + range
+const GIFTS: { k: 'food' | 'power' | 'medicine'; vit: VitKey; min: number; max: number }[] = [
+  { k: 'food', vit: 'FOOD', min: 6, max: 14 },
+  { k: 'power', vit: 'POWER', min: 3, max: 7 },
+  { k: 'medicine', vit: 'MEDICINE', min: 2, max: 5 },
+];
+
+const LB_RANKS = ['🥇', '🥈', '🥉'];
+
 const vitColor = (pct: number, danger = false): string =>
   danger ? (pct >= 70 ? '#c85040' : pct >= 40 ? '#e8c34a' : '#57c06a') : pct < 25 ? '#c85040' : pct < 50 ? '#e8c34a' : '#57c06a';
 
@@ -460,6 +493,53 @@ function LiveTab({
   );
 }
 
+// TOP 🏆 tab — subreddit contribution leaderboard + city totals.
+function TopTab({ contribs }: { contribs: Record<string, Contrib> }) {
+  const ranked = Object.entries(contribs)
+    .sort((a, b) => b[1].score - a[1].score)
+    .map(([name, c], i) => ({ name, c, rank: i }));
+  // top 8, but the player's row stays pinned on (with its true rank)
+  const rows = ranked.slice(0, 8);
+  const you = ranked.find((r) => r.name === 'u/you');
+  if (you && you.rank >= 8) rows.push(you);
+  const topScore = Math.max(1, ranked[0]?.c.score ?? 1);
+  const totals = Object.values(contribs).reduce(
+    (acc, c) => ({
+      houses: acc.houses + c.houses,
+      food: acc.food + c.food,
+      power: acc.power + c.power,
+      medicine: acc.medicine + c.medicine,
+    }),
+    { houses: 0, food: 0, power: 0, medicine: 0 },
+  );
+  return (
+    <>
+      <div className="p-sec">TOP CONTRIBUTORS</div>
+      <div className="lb">
+        {rows.map(({ name, c, rank }) => (
+          <div key={name} className={name === 'u/you' ? 'lb-row me' : 'lb-row'}>
+            <span className="lb-rank">{LB_RANKS[rank] ?? rank + 1}</span>
+            <span className="lb-user">{name}</span>
+            <span className="lb-stats">
+              🏠{c.houses} · 🍞{c.food} · ⚡{c.power} · 🩹{c.medicine}
+            </span>
+            <span className="lb-score">{c.score}</span>
+            <div className="lb-bar">
+              <i style={{ width: `${Math.round((c.score / topScore) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-sec">CITY TOTALS</div>
+      <div className="lb-total">
+        🏠 {totals.houses} houses bought · gifted 🍞{totals.food} · ⚡{totals.power} · 🩹{totals.medicine}
+      </div>
+    </>
+  );
+}
+
+type DashTab = 'city' | 'live' | 'top';
+
 function CityDashboard({
   open,
   setOpen,
@@ -471,17 +551,19 @@ function CityDashboard({
   selectedName,
   onVisit,
   live,
+  contribs,
 }: {
   open: boolean;
   setOpen: (b: boolean) => void;
-  tab: 'city' | 'live';
-  setTab: (t: 'city' | 'live') => void;
+  tab: DashTab;
+  setTab: (t: DashTab) => void;
   pois: PoiInfo[];
   levels: Record<string, number>;
   vitals: Vitals;
   selectedName: string | null;
   onVisit: (name: string) => void;
   live: LiveState;
+  contribs: Record<string, Contrib>;
 }) {
   return (
     <>
@@ -503,9 +585,14 @@ function CityDashboard({
           <button type="button" className={tab === 'live' ? 'dash-tab on' : 'dash-tab'} onClick={() => setTab('live')} aria-pressed={tab === 'live'}>
             LIVE
           </button>
+          <button type="button" className={tab === 'top' ? 'dash-tab on' : 'dash-tab'} onClick={() => setTab('top')} aria-pressed={tab === 'top'}>
+            TOP 🏆
+          </button>
         </div>
 
         {tab === 'live' && <LiveTab {...live} />}
+
+        {tab === 'top' && <TopTab contribs={contribs} />}
 
         {tab === 'city' && (
           <>
@@ -763,7 +850,7 @@ export function App() {
   });
   const [panelOpen, setPanelOpen] = useState(true);
   const [dashOpen, setDashOpen] = useState(true);
-  const [dashTab, setDashTab] = useState<'city' | 'live'>('live');
+  const [dashTab, setDashTab] = useState<DashTab>('live');
   // ---- the mini-game state machines ----
   const [vitals, setVitals] = useState<Vitals>(START_VITALS);
   const [population, setPopulation] = useState(143);
@@ -795,6 +882,8 @@ export function App() {
     repair_power: 4,
   });
   const [raidDays, setRaidDays] = useState(5);
+  // subreddit contributions — houses bought + resources gifted, per user
+  const [contribs, setContribs] = useState<Record<string, Contrib>>(START_CONTRIBS);
   // seed newest-first: DRAMA[2] is the freshest, rotation continues at index 3
   const [events, setEvents] = useState<LiveEvent[]>(() => [2, 1, 0].map((i) => ({ ...DRAMA[i]!, key: i })));
   const handleRef = useRef<VillageHandle | null>(null);
@@ -825,10 +914,14 @@ export function App() {
   const scoutingRef = useRef(false); // click guard: one scout out at a time
   const scoutTimerRef = useRef<number | null>(null);
   const poisRef = useRef<PoiInfo[]>([]); // district directory, readable in handlers
+  const contribsRef = useRef<Record<string, Contrib>>(START_CONTRIBS); // fresh reads in timers
 
   useEffect(() => {
     timeRef.current = time;
   }, [time]);
+  useEffect(() => {
+    contribsRef.current = contribs;
+  }, [contribs]);
   useEffect(() => {
     vitalsRef.current = vitals;
   }, [vitals]);
@@ -859,6 +952,21 @@ export function App() {
     notifKeyRef.current += 1;
     setNotifs((prev) => [{ icon, text, tone, key }, ...prev].slice(0, 4));
     notifTimersRef.current.push(window.setTimeout(() => setNotifs((prev) => prev.filter((n) => n.key !== key)), 5000));
+  }, []);
+
+  // ---- contribution helpers ----
+  // merge a patch into a user's contribution record and recompute their score
+  const addContrib = useCallback((user: string, patch: ContribPatch) => {
+    setContribs((prev) => {
+      const cur = prev[user] ?? mkContrib(0, 0, 0, 0);
+      const merged = mkContrib(
+        cur.houses + (patch.houses ?? 0),
+        cur.food + (patch.food ?? 0),
+        cur.power + (patch.power ?? 0),
+        cur.medicine + (patch.medicine ?? 0),
+      );
+      return { ...prev, [user]: merged };
+    });
   }, []);
 
   const onReady = useCallback((h: VillageHandle) => {
@@ -898,6 +1006,7 @@ export function App() {
     (x: number, _z: number) => {
       setPopulation((p) => p + 4);
       setVitals((v) => ({ ...v, FOOD: clampVit('FOOD', v.FOOD - 5) }));
+      addContrib('u/you', { houses: 1 });
       pushEvent('🔨', `A new hut rose in the ${x < 0 ? 'west' : 'east'} quarter — a family moves in.`);
       pushNotif('🔨', 'a new hut — +4 souls', 'good');
       popToast('Hut raised — +4 souls');
@@ -905,7 +1014,7 @@ export function App() {
       setBuildMode(false);
       (handleRef.current as any)?.setBuildMode?.(false);
     },
-    [pushEvent, pushNotif, popToast],
+    [addContrib, pushEvent, pushNotif, popToast],
   );
 
   const setTime = useCallback((t: TimeOfDay) => {
@@ -1074,14 +1183,17 @@ export function App() {
       setUsed(usedRef.current);
       if (id === 'grow_food') {
         setVitals((v) => ({ ...v, FOOD: clampVit('FOOD', v.FOOD + 3) }));
+        addContrib('u/you', { food: 3 });
         pushEvent('🌾', 'The growers coaxed 3 more food from the greenhouse beds.');
         pushNotif('🍞', 'Food grown — the greenhouse holds');
       } else if (id === 'repair_power') {
         setVitals((v) => ({ ...v, POWER: clampVit('POWER', v.POWER + 4) }));
+        addContrib('u/you', { power: 4 });
         pushEvent('🔧', 'Hands on the generator through the morning — power steadies.');
         pushNotif('⚡', 'Generator steadied');
       } else if (id === 'treat_sick') {
         setVitals((v) => ({ ...v, MEDICINE: clampVit('MEDICINE', v.MEDICINE + 2) }));
+        addContrib('u/you', { medicine: 2 });
         pushEvent('⛑️', 'The clinic worked the ward — the sick rest easier.');
         pushNotif('🩹', 'The sick rest easier');
       } else if (id === 'guard_wall') {
@@ -1098,7 +1210,7 @@ export function App() {
       const hit = poisRef.current.find((p) => frags.some((f) => p.name.toUpperCase().includes(f)));
       if (hit) (handleRef.current as any)?.flashDistrict?.(hit.name);
     },
-    [pushEvent, pushNotif],
+    [addContrib, pushEvent, pushNotif],
   );
 
   // SCAVENGE — one scout out at a time; loot (and risk) lands when they return.
@@ -1125,11 +1237,12 @@ export function App() {
           setPopulation((p) => Math.max(0, p - 1));
           pushNotif('☠️', "a scout didn't come back", 'bad');
         }
+        addContrib('u/you', { food: route.food });
         pushNotif('🎒', `the scout returns — +${route.food} food`, 'good');
         pushEvent('🎒', `A scout came back from the ${route.title} with ${route.food} food.`);
       }, route.dur);
     },
-    [pushEvent, pushNotif],
+    [addContrib, pushEvent, pushNotif],
   );
 
   // RAID — 9s of dread, then the wall decides on CURRENT defense.
@@ -1180,6 +1293,47 @@ export function App() {
       }, 9000),
     );
   }, [pushEvent, pushNotif]);
+
+  // SUBREDDIT SIMULATION — a community member buys a house (scene API, added
+  // by another agent) or gifts resources into the city stores.
+  const simBuyHouse = useCallback(
+    (user: string) => {
+      // optional scene API — returns where the house rose, or null if full
+      const spot = (handleRef.current as any)?.buyHouse?.(user) as { x: number; z: number; quarter: string } | null | undefined;
+      if (!spot) return; // town full (or scene API absent) — skip silently
+      setPopulation((p) => p + 3);
+      addContrib(user, { houses: 1 });
+      pushNotif('🏠', `${user} bought a house in the ${spot.quarter} quarter`, 'good');
+      pushEvent('🏠', `${user} bought a house in the ${spot.quarter} quarter`);
+    },
+    [addContrib, pushEvent, pushNotif],
+  );
+  const simContribute = useCallback(
+    (user: string) => {
+      const gift = GIFTS[Math.floor(Math.random() * GIFTS.length)]!;
+      const n = gift.min + Math.floor(Math.random() * (gift.max - gift.min + 1));
+      setVitals((v) => ({ ...v, [gift.vit]: clampVit(gift.vit, v[gift.vit] + n) }));
+      const patch: ContribPatch = gift.k === 'food' ? { food: n } : gift.k === 'power' ? { power: n } : { medicine: n };
+      addContrib(user, patch);
+      pushNotif('🎁', `${user} contributed ${n} ${gift.k}`);
+      pushEvent('🎁', `${user} contributed ${n} ${gift.k}`);
+    },
+    [addContrib, pushEvent, pushNotif],
+  );
+  // one tick: random member, 40% house purchase / 60% resource gift
+  const simTick = useCallback(
+    (user?: string) => {
+      const u = user ?? SUB_USERS[Math.floor(Math.random() * SUB_USERS.length)]!;
+      if (Math.random() < 0.4) simBuyHouse(u);
+      else simContribute(u);
+    },
+    [simBuyHouse, simContribute],
+  );
+  // the subreddit stirs every ~11s
+  useEffect(() => {
+    const id = window.setInterval(() => simTick(), 11000);
+    return () => window.clearInterval(id);
+  }, [simTick]);
 
   // LIVE tab simulation — every number drifts on its own clock:
   //   pledges +1 / ~7s · crisis votes +1 / ~9s · council votes +1 / ~11s ·
@@ -1260,7 +1414,8 @@ export function App() {
   }, [raidDays, loaded]);
 
   // QA hooks: window.__omdDemo.raidNow() / .build() / .sayHi() /
-  // .selectVillager(name) / .action(id) / .scavenge(routeId)
+  // .selectVillager(name) / .action(id) / .scavenge(routeId) /
+  // .contribute(user?) / .buyHouse(user?)
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__omdDemo = {
       raidNow: () => {
@@ -1272,11 +1427,13 @@ export function App() {
       selectVillager: (n: string) => onVillager(n),
       action: (id: string) => runAction(id),
       scavenge: (routeId: RouteId) => runScavenge(routeId),
+      contribute: (user?: string) => simTick(user),
+      buyHouse: (user?: string) => simBuyHouse(user ?? SUB_USERS[Math.floor(Math.random() * SUB_USERS.length)]!),
     };
     return () => {
       delete (window as unknown as Record<string, unknown>).__omdDemo;
     };
-  }, [toggleBuild, onSayHi, onVillager, runAction, runScavenge]);
+  }, [toggleBuild, onSayHi, onVillager, runAction, runScavenge, simTick, simBuyHouse]);
 
   return (
     <>
@@ -1330,6 +1487,7 @@ export function App() {
           raidDays,
           events,
         }}
+        contribs={contribs}
       />
       {villager ? (
         <VillagerChip name={villager} hiCooldown={hiCooldown} onWave={onWaveAt} onSayHi={onSayHi} onClose={clearVillager} />

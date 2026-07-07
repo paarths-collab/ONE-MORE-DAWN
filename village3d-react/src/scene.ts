@@ -1,6 +1,6 @@
 // ONE MORE DAWN — 3D town scene v3 ("the guild map").
-// A ~110-tile organic plateau ringed by mountains: seeded winding dirt roads,
-// ~80 rustic houses placed along them, 12 labeled districts (floating banner
+// A ~140-tile organic plateau ringed by mountains: seeded winding dirt roads,
+// ~240 rustic houses placed along them, 12 labeled districts (floating banner
 // labels via CSS2DRenderer), a palisade wall with gates, dense pine forest.
 // Same live API as v2: setTimeOfDay / setVillagers / setCompanion; the whole
 // environment lerps between night/dawn/day/dusk presets.
@@ -48,6 +48,12 @@ export type VillageHandle = {
   waveAt: (name: string) => void;
   /** Toggle hut-placement mode: ghost hut follows the pointer; tap a valid tile to build. */
   setBuildMode: (on: boolean) => void;
+  /**
+   * Build a house for a named owner at a random free spot (roadside preferred)
+   * and float a temporary owner tag over it. Returns the tile + compass quarter,
+   * or null if no valid spot was found.
+   */
+  buyHouse: (owner: string) => { x: number; z: number; quarter: string } | null;
   /** One-shot golden ring flash + scale pop on a labeled district. */
   flashDistrict: (name: string) => void;
   dispose: () => void;
@@ -85,7 +91,7 @@ const C = {
   crop: 0x8fb04f, cropDark: 0x4f7030,
 };
 
-// ---------- time-of-day presets (distances tuned for the ~110-unit world) ----------
+// ---------- time-of-day presets (distances tuned for the ~140-unit world) ----------
 type EnvPreset = {
   bg: number; fogNear: number; fogFar: number;
   hemiSky: number; hemiGround: number; hemiInt: number;
@@ -96,25 +102,25 @@ type EnvPreset = {
 };
 const PRESETS: Record<TimeOfDay, EnvPreset> = {
   night: {
-    bg: 0x141b2d, fogNear: 110, fogFar: 420,
+    bg: 0x141b2d, fogNear: 138, fogFar: 525,
     hemiSky: 0x2a3654, hemiGround: 0x0c1018, hemiInt: 0.55,
     sunColor: 0x8fa5d8, sunInt: 0.4, sunPos: [-40, 85, -30],
     stars: 1, windowCol: 0xffc46a, discCol: 0xdfe8ff, discScale: 3.4, campfire: 30,
   },
   dawn: {
-    bg: 0xe89a66, fogNear: 95, fogFar: 380,
+    bg: 0xe89a66, fogNear: 119, fogFar: 475,
     hemiSky: 0xffc9a0, hemiGround: 0x3a4034, hemiInt: 0.75,
     sunColor: 0xffb37a, sunInt: 1.7, sunPos: [95, 20, 40],
     stars: 0.3, windowCol: 0xffcf78, discCol: 0xffd9a8, discScale: 7, campfire: 14,
   },
   day: {
-    bg: 0x9ac8e8, fogNear: 140, fogFar: 480,
+    bg: 0x9ac8e8, fogNear: 175, fogFar: 600,
     hemiSky: 0xfff2d8, hemiGround: 0x4a6b35, hemiInt: 0.95,
     sunColor: 0xfff0c2, sunInt: 2.4, sunPos: [60, 95, 40],
     stars: 0, windowCol: 0x5a4a34, discCol: 0xfff6d8, discScale: 3, campfire: 0,
   },
   dusk: {
-    bg: 0xc2694a, fogNear: 100, fogFar: 400,
+    bg: 0xc2694a, fogNear: 125, fogFar: 500,
     hemiSky: 0xe8a06a, hemiGround: 0x2c2118, hemiInt: 0.65,
     sunColor: 0xff9a5a, sunInt: 1.2, sunPos: [-85, 22, 45],
     stars: 0.2, windowCol: 0xffc46a, discCol: 0xffb37a, discScale: 6.4, campfire: 22,
@@ -147,8 +153,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   scene.background = new THREE.Color(PRESETS.dawn.bg);
   scene.fog = new THREE.Fog(PRESETS.dawn.bg, PRESETS.dawn.fogNear, PRESETS.dawn.fogFar);
 
-  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 900);
-  camera.position.set(4, 66, 88);
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 1000);
+  camera.position.set(5, 82, 110);
 
   const size = () => {
     const w = Math.max(1, container.clientWidth);
@@ -168,15 +174,15 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 20;
-  controls.maxDistance = 130;
+  controls.maxDistance = 165;
   controls.minPolarAngle = 0.35;
   controls.maxPolarAngle = 1.12;
   controls.screenSpacePanning = false;
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.addEventListener('change', () => {
-    controls.target.x = THREE.MathUtils.clamp(controls.target.x, -42, 42);
-    controls.target.z = THREE.MathUtils.clamp(controls.target.z, -42, 42);
+    controls.target.x = THREE.MathUtils.clamp(controls.target.x, -52, 52);
+    controls.target.z = THREE.MathUtils.clamp(controls.target.z, -52, 52);
     controls.target.y = 0;
   });
 
@@ -187,11 +193,11 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   sun.position.set(...PRESETS.dawn.sunPos);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
-  sun.shadow.camera.left = -70;
-  sun.shadow.camera.right = 70;
-  sun.shadow.camera.top = 70;
-  sun.shadow.camera.bottom = -70;
-  sun.shadow.camera.far = 320;
+  sun.shadow.camera.left = -90;
+  sun.shadow.camera.right = 90;
+  sun.shadow.camera.top = 90;
+  sun.shadow.camera.bottom = -90;
+  sun.shadow.camera.far = 380;
   sun.shadow.bias = -0.0005;
   scene.add(sun);
 
@@ -329,11 +335,11 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     return m;
   };
 
-  // ---------- plateau shape (organic radius, ~108 tiles across) ----------
+  // ---------- plateau shape (organic radius, ~135 tiles across) ----------
   const PHI1 = rng() * Math.PI * 2;
   const PHI2 = rng() * Math.PI * 2;
   const plateauR = (theta: number) =>
-    46 + 6.5 * Math.sin(3 * theta + PHI1) + 4 * Math.sin(7 * theta + PHI2);
+    58 + 8 * Math.sin(3 * theta + PHI1) + 5 * Math.sin(7 * theta + PHI2);
   const insidePlateau = (x: number, z: number, margin = 0) =>
     Math.hypot(x, z) < plateauR(Math.atan2(z, x)) - margin;
 
@@ -399,6 +405,22 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       const r2 = 33 + Math.sin(a * 4 + PHI2) * 2.5;
       roads.push(windingPath(Math.cos(a) * r2, Math.sin(a) * r2, Math.cos(a) * r1, Math.sin(a) * r1));
     }
+    // third ring (~r43 avg) hugging the new outer band — tracks the plateau edge
+    // so it always stays well inside the palisade wobble
+    const ring3: [number, number][] = [];
+    const N3 = 36;
+    for (let i = 0; i <= N3; i++) {
+      const a = (i / N3) * Math.PI * 2;
+      const r = plateauR(a) - 13 + (rng() - 0.5) * 1.5;
+      ring3.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+    roads.push(ring3);
+    // connectors: third ring → outer ring at 3 angles
+    for (const a of [0.6, 2.5, 4.1]) {
+      const r2 = 33 + Math.sin(a * 4 + PHI2) * 2.5;
+      const r3 = plateauR(a) - 13;
+      roads.push(windingPath(Math.cos(a) * r3, Math.sin(a) * r3, Math.cos(a) * r2, Math.sin(a) * r2));
+    }
   }
 
   const roadTiles = new Set<string>();
@@ -425,7 +447,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) if (Math.hypot(dx, dz) <= 4.4) roadTiles.add(key(dx, dz));
 
   // ---------- terrain tiles ----------
-  const SIZE = 112; // bounding grid — plateau carves an organic ~92..105-tile shape out of it
+  const SIZE = 140; // bounding grid — plateau carves an organic ~100..135-tile shape out of it
   {
     const positions: [number, number, boolean][] = [];
     for (let ix = -SIZE / 2; ix <= SIZE / 2; ix++) {
@@ -475,8 +497,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   {
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     const rocks: { x: number; z: number; s: number; h: number; c: number }[] = [];
-    for (let i = 0; i < 150; i++) {
-      const a = (i / 150) * Math.PI * 2 + rng() * 0.06;
+    for (let i = 0; i < 190; i++) {
+      const a = (i / 190) * Math.PI * 2 + rng() * 0.06;
       const base = plateauR(a);
       const r = base + 2.5 + rng() * 10;
       const s = 4 + rng() * 7;
@@ -594,7 +616,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // TRADE — market square east
   {
-    const [x, z] = ringSpot(0.3, 24);
+    const [x, z] = ringSpot(0.3, 30);
     const g = new THREE.Group();
     for (const [sx, sz, ry] of [[-2, 0, 0.3], [0.4, -1.6, -0.4], [2.2, 0.6, 0.9]] as const) {
       const stall = new THREE.Group();
@@ -615,7 +637,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // RELIGION — chapel north
   {
-    const [x, z] = ringSpot(-1.85, 25);
+    const [x, z] = ringSpot(-1.85, 31);
     const g = new THREE.Group();
     g.add(box(2.6, 1.8, 4.0, MAT.plaster, 0, 0.9, 0));
     g.add(pyramid(3.0, 1.4, 4.4, MAT.roofSlateDark, 0, 2.5, 0));
@@ -628,7 +650,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // TROOPS — barracks + yard NE
   {
-    const [x, z] = ringSpot(-0.75, 26);
+    const [x, z] = ringSpot(-0.75, 33);
     const g = new THREE.Group();
     g.add(box(4.0, 1.8, 2.4, MAT.timber, 0, 0.9, 0));
     g.add(pyramid(4.4, 1.3, 2.8, MAT.roofSlateDark, 0, 2.4, 0));
@@ -644,7 +666,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // STORAGE — warehouses SE
   {
-    const [x, z] = ringSpot(1.05, 25);
+    const [x, z] = ringSpot(1.05, 31);
     const g = new THREE.Group();
     g.add(box(4.4, 1.6, 2.0, MAT.timber, -0.5, 0.8, -0.9));
     g.add(pyramid(4.8, 1.1, 2.4, MAT.roofBrown, -0.5, 2.1, -0.9));
@@ -656,7 +678,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   // PRODUCTION — mill + fields west
   let rotor: THREE.Group | null = null;
   {
-    const [x, z] = ringSpot(3.3, 26);
+    const [x, z] = ringSpot(3.3, 33);
     const g = new THREE.Group();
     g.add(box(2.0, 0.5, 2.0, MAT.stoneDark, 0, 0.25, 0));
     g.add(box(1.7, 3.0, 1.7, MAT.plaster, 0, 2.0, 0));
@@ -680,7 +702,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // FEASTS — long tables + fire pit NW
   {
-    const [x, z] = ringSpot(-2.6, 23);
+    const [x, z] = ringSpot(-2.6, 29);
     const g = new THREE.Group();
     for (const [tx, tz, ry] of [[-1.6, 0, 0.2], [1.6, 0.4, -0.15]] as const) {
       const tbl = new THREE.Group();
@@ -701,7 +723,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // COMMAND STAFF — small stone keep, inner north
   {
-    const [x, z] = ringSpot(-1.2, 13);
+    const [x, z] = ringSpot(-1.2, 16);
     const g = new THREE.Group();
     g.add(box(2.6, 2.4, 2.6, MAT.stone, 0, 1.2, 0));
     g.add(box(3.0, 0.4, 3.0, MAT.stoneDark, 0, 2.6, 0));
@@ -712,7 +734,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // DIPLOMACY — fine house, inner SE
   {
-    const [x, z] = ringSpot(0.9, 13);
+    const [x, z] = ringSpot(0.9, 16);
     const g = new THREE.Group();
     g.add(box(2.8, 1.6, 2.2, MAT.plaster, 0, 0.8, 0));
     g.add(box(3.0, 0.25, 2.4, MAT.timberDark, 0, 1.72, 0));
@@ -726,7 +748,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // NEWS — notice board, inner west
   {
-    const [x, z] = ringSpot(2.6, 12);
+    const [x, z] = ringSpot(2.6, 15);
     const g = new THREE.Group();
     g.add(cyl(0.09, 1.8, MAT.timberDark, -0.9, 0.9, 0, 6));
     g.add(cyl(0.09, 1.8, MAT.timberDark, 0.9, 0.9, 0, 6));
@@ -738,7 +760,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // LAWS — columned court, inner east
   {
-    const [x, z] = ringSpot(-0.2, 14);
+    const [x, z] = ringSpot(-0.2, 17);
     const g = new THREE.Group();
     g.add(box(3.2, 0.4, 2.4, MAT.stoneDark, 0, 0.2, 0));
     g.add(box(2.8, 1.6, 2.0, MAT.stone, 0, 1.2, 0));
@@ -758,7 +780,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   }
   // STATISTICS — survey tower, inner NE
   {
-    const [x, z] = ringSpot(-0.5, 19);
+    const [x, z] = ringSpot(-0.5, 24);
     const g = new THREE.Group();
     g.add(box(1.6, 4.2, 1.6, MAT.timber, 0, 2.1, 0));
     g.add(box(2.2, 0.3, 2.2, MAT.timberDark, 0, 4.35, 0));
@@ -768,7 +790,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     register(g, x, z, { name: 'STATISTICS', level: 2, blurb: 'Dawns survived, pledges counted — the chronicle keeps score.' }, 2.4, { icon: '📊', y: 7.0 });
   }
 
-  // ---------- filler houses along the roads (~80) ----------
+  // ---------- filler houses along the roads (~240) ----------
   {
     let placed = 0;
     const candidates: [number, number, number][] = [];
@@ -795,9 +817,9 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       }
     }
     // interior in-fill blocks (the reference town is dense between roads too)
-    for (let i = 0; i < 170; i++) {
+    for (let i = 0; i < 300; i++) {
       const a = rng() * Math.PI * 2;
-      const r = 8 + Math.sqrt(rng()) * 29;
+      const r = 8 + Math.sqrt(rng()) * 42;
       candidates.push([Math.cos(a) * r, Math.sin(a) * r, rng() * Math.PI * 2]);
     }
     // shuffle-ish deterministic order
@@ -806,7 +828,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
     }
     for (const [hx, hz, facing] of candidates) {
-      if (placed >= 150) break;
+      if (placed >= 240) break;
       if (!insidePlateau(hx, hz, 7)) continue;
       // r=1 (3×3 tiles) fits the ~2-unit house footprint without swallowing the
       // roadside strip; occupy() below still reserves 5×5 so houses keep gaps.
@@ -819,7 +841,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   // ---------- palisade wall (instanced log posts along the plateau, inset) ----------
   {
     const posts: [number, number][] = [];
-    const N = 560;
+    const N = 700;
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2;
       const r = plateauR(a) - 2.6;
@@ -860,7 +882,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   // ---------- forest (instanced pines: between wall and cliffs + sprinkled inside) ----------
   {
     const spots: [number, number, number][] = [];
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 1100; i++) {
       const a = rng() * Math.PI * 2;
       const edge = plateauR(a);
       const r = edge - 2.2 + rng() * 1.6; // just outside the palisade
@@ -869,11 +891,11 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       if (!insidePlateau(x, z, 0.5)) continue;
       if (GATE_ANGLES.some((ga) => Math.abs(Math.atan2(Math.sin(a - ga), Math.cos(a - ga))) < 0.09)) continue;
       spots.push([x, z, 0.8 + rng() * 0.9]);
-      if (spots.length >= 300) break;
+      if (spots.length >= 380) break;
     }
-    for (let i = 0; i < 700 && spots.length < 440; i++) {
+    for (let i = 0; i < 900 && spots.length < 560; i++) {
       const a = rng() * Math.PI * 2;
-      const r = Math.sqrt(rng()) * 40;
+      const r = Math.sqrt(rng()) * 50;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
       if (!isFree(x, z, 1) || !insidePlateau(x, z, 6)) continue;
@@ -1105,9 +1127,9 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
 
   const COMPANIONS: Record<CompanionKind, { file: string; size: number; orbit?: [number, number, number, number] }> = {
     horse: { file: 'Horse.glb', size: 2.1 },
-    flamingo: { file: 'Flamingo.glb', size: 1.5, orbit: [20, 13, 0.2, 0] },
-    parrot: { file: 'Parrot.glb', size: 1.5, orbit: [14, 11, 0.27, 2.2] },
-    stork: { file: 'Stork.glb', size: 1.5, orbit: [27, 15, 0.16, 4.1] },
+    flamingo: { file: 'Flamingo.glb', size: 1.5, orbit: [25, 13, 0.2, 0] },
+    parrot: { file: 'Parrot.glb', size: 1.5, orbit: [18, 11, 0.27, 2.2] },
+    stork: { file: 'Stork.glb', size: 1.5, orbit: [34, 15, 0.16, 4.1] },
   };
   const companions = new Map<CompanionKind, Actor>();
   async function setCompanionImpl(kind: CompanionKind, on: boolean) {
@@ -1133,7 +1155,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     const actor: Actor = { obj, mixer };
     if (kind === 'horse') {
       // paddock by the PRODUCTION fields (west ring)
-      const [px, pz] = ringSpot(3.3, 26);
+      const [px, pz] = ringSpot(3.3, 33);
       actor.walker = makeWalker(obj, [[px - 1, pz - 5.4], [px + 3.6, pz - 5.0], [px + 4.2, pz - 7.4], [px - 0.4, pz - 7.6]], 1.1);
     } else if (def.orbit) {
       orbiters.set(kind, { actor, radius: def.orbit[0], height: def.orbit[1], speed: def.orbit[2], phase: def.orbit[3] });
@@ -1318,7 +1340,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   // ---------- build mode (ghost hut placement) ----------
   // invisible ground catcher: raycast target for pointer→tile mapping
   // (Mesh.raycast ignores material.visible, so this stays hit-testable)
-  const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ visible: false }));
+  const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.MeshBasicMaterial({ visible: false }));
   groundPlane.rotation.x = -Math.PI / 2;
   groundPlane.position.y = 0;
   scene.add(groundPlane);
@@ -1352,6 +1374,64 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     buildMode = on;
     renderer.domElement.style.cursor = on ? 'crosshair' : 'grab';
     if (!on) ghost.visible = false;
+  }
+
+  // ---------- house ownership (runtime purchases) ----------
+  // Plain Math.random on purpose: this is live activity, not layout — consuming
+  // the seeded rng here would still be harmless post-build, but sampling must
+  // not depend on it so the deterministic town stays byte-identical in tests.
+  const ownerTimers = new Set<number>();
+  const nearRoad = (x: number, z: number, d: number) => {
+    for (let dx = -d; dx <= d; dx++) {
+      for (let dz = -d; dz <= d; dz++) {
+        if (roadTiles.has(key(x + dx, z + dz))) return true;
+      }
+    }
+    return false;
+  };
+  function buyHouse(owner: string): { x: number; z: number; quarter: string } | null {
+    // sample tiles inside the plateau: prefer a spot within ~2 tiles of a road,
+    // fall back to any valid tile seen along the way
+    let roadside: [number, number] | null = null;
+    let anywhere: [number, number] | null = null;
+    for (let i = 0; i < 80 && !roadside; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 60;
+      const x = Math.round(Math.cos(a) * r);
+      const z = Math.round(Math.sin(a) * r);
+      if (!buildValid(x, z)) continue;
+      if (nearRoad(x, z, 2)) roadside = [x, z];
+      else if (!anywhere) anywhere = [x, z];
+    }
+    const spot = roadside ?? anywhere;
+    if (!spot) return null;
+    const [x, z] = spot;
+    house(x, z, Math.random() * Math.PI * 2); // adds to scene + occupies
+
+    // temporary owner tag above the new roof — visibility is class-only
+    // (CSS2DRenderer overwrites the element's inline transform every frame)
+    const el = document.createElement('div');
+    el.className = 'h-owner';
+    el.textContent = owner;
+    const tag = new CSS2DObject(el);
+    tag.position.set(x, 2.6, z);
+    scene.add(tag);
+    // timeout, not rAF: rAF never fires in hidden tabs, which would leave the
+    // label permanently transparent there — 30ms is late enough for the transition
+    const revealTimer = window.setTimeout(() => {
+      ownerTimers.delete(revealTimer);
+      el.classList.add('on');
+    }, 30);
+    ownerTimers.add(revealTimer);
+    const timer = window.setTimeout(() => {
+      ownerTimers.delete(timer);
+      scene.remove(tag);
+      el.remove();
+    }, 7000);
+    ownerTimers.add(timer);
+
+    const quarter = Math.abs(x) > Math.abs(z) ? (x < 0 ? 'west' : 'east') : (z < 0 ? 'north' : 'south');
+    return { x, z, quarter };
   }
 
   const onMove = (e: PointerEvent) => {
@@ -1553,6 +1633,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     sayTo,
     waveAt,
     setBuildMode,
+    buyHouse,
     flashDistrict,
     pause: () => renderer.setAnimationLoop(null),
     resume: () => renderer.setAnimationLoop(tick),
@@ -1561,6 +1642,8 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       disposed = true;
       renderer.setAnimationLoop(null);
       window.clearInterval(chatTimer);
+      for (const t of ownerTimers) window.clearTimeout(t);
+      ownerTimers.clear();
       for (const a of actors) {
         if (a.bubbleTimer !== undefined) window.clearTimeout(a.bubbleTimer);
         if (a.nameTimer !== undefined) window.clearTimeout(a.nameTimer);
