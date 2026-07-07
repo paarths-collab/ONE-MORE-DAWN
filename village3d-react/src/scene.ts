@@ -22,6 +22,10 @@ export type VillageHooks = {
   onSelect: (meta: BuildingMeta | null) => void;
   /** Fired once after build with the full labeled-district directory. */
   onPois?: (pois: PoiInfo[]) => void;
+  /** Ambient villager chatter (username + line) — mirror it into the HUD feed. */
+  onChat?: (who: string, text: string) => void;
+  /** Fired after build-mode places a hut at snapped tile (x, z). */
+  onBuilt?: (x: number, z: number) => void;
 };
 
 export type VillageHandle = {
@@ -34,6 +38,12 @@ export type VillageHandle = {
   setRaidWatch: (on: boolean) => void;
   /** One-shot vigil light-pillar pulse at the RELIGION district (retriggerable). */
   pulseMarked: () => void;
+  /** Speech-bubble a line (5s) over a random villager — or the gate guard if none walk. */
+  say: (text: string) => void;
+  /** Toggle hut-placement mode: ghost hut follows the pointer; tap a valid tile to build. */
+  setBuildMode: (on: boolean) => void;
+  /** One-shot golden ring flash + scale pop on a labeled district. */
+  flashDistrict: (name: string) => void;
   dispose: () => void;
   pause: () => void;
   resume: () => void;
@@ -926,7 +936,15 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   const idleOffset = new THREE.Vector3();
 
   // ---------- characters ----------
-  type Actor = { obj: THREE.Object3D; mixer: THREE.AnimationMixer; walker?: (dt: number) => void };
+  type Actor = {
+    obj: THREE.Object3D;
+    mixer: THREE.AnimationMixer;
+    walker?: (dt: number) => void;
+    // lazy speech-bubble kit (created on first showBubble)
+    bubbleEl?: HTMLDivElement;
+    bubbleObj?: CSS2DObject;
+    bubbleTimer?: number;
+  };
   const actors = new Set<Actor>();
   const orbiters = new Map<CompanionKind, { actor: Actor; radius: number; height: number; speed: number; phase: number }>();
 
@@ -1084,6 +1102,56 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   void setCompanionImpl('parrot', true);
   void setCompanionImpl('stork', true);
 
+  // ---------- villager speech bubbles + ambient chatter ----------
+  function showBubble(actor: Actor, text: string, seconds: number) {
+    if (!actor.bubbleEl) {
+      const el = document.createElement('div');
+      el.className = 'v-bubble';
+      const obj = new CSS2DObject(el);
+      obj.position.set(0, 2.2, 0); // above the model root
+      actor.obj.add(obj);
+      actor.bubbleEl = el;
+      actor.bubbleObj = obj;
+    }
+    actor.bubbleEl.textContent = text;
+    actor.bubbleEl.classList.add('on');
+    if (actor.bubbleTimer !== undefined) window.clearTimeout(actor.bubbleTimer);
+    actor.bubbleTimer = window.setTimeout(() => {
+      actor.bubbleEl?.classList.remove('on');
+      actor.bubbleTimer = undefined;
+    }, seconds * 1000);
+  }
+
+  const CHATTER = [
+    'hii 👋',
+    'gm city 🌅',
+    "who's on wall duty tonight?",
+    'the greenhouse smells like rain',
+    'heard raiders were sighted east',
+    'we need more food before dawn',
+    'u/overseer says hold the line',
+    'did anyone check on Mira?',
+    'one more dawn, friends',
+    'trade rumors from r/ironhollow…',
+  ];
+  const CHAT_USERS = ['u/ashen_fox', 'u/quiet_marrow', 'u/saltcedar', 'u/brackenwren', 'u/palewick', 'u/mx_ember'];
+  let chatIdx = 0;
+  const chatTimer = window.setInterval(() => {
+    if (villagers.length === 0) return;
+    const v = villagers[Math.floor(rng() * villagers.length)]!;
+    const text = CHATTER[chatIdx % CHATTER.length]!;
+    const who = CHAT_USERS[chatIdx % CHAT_USERS.length]!;
+    chatIdx++;
+    showBubble(v, text, 4);
+    hooks.onChat?.(who, text);
+  }, 9000);
+
+  function say(text: string) {
+    const speaker = villagers.length > 0 ? villagers[Math.floor(rng() * villagers.length)]! : guard;
+    if (!speaker) return;
+    showBubble(speaker, text, 5); // no onChat echo — the HUD adds its own row
+  }
+
   // publish the district directory to the React dashboard
   hooks.onPois?.(poiList);
 
@@ -1104,6 +1172,21 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     setSelected(group);
     const { name: n, level, blurb } = group.userData as BuildingMeta;
     hooks.onSelect({ name: n, level, blurb });
+  }
+
+  // ---------- district flash (ring blast + y-pop, driven per-frame in tick) ----------
+  const flashes: { ring: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: THREE.Group; t: number }[] = [];
+  function flashDistrict(name: string) {
+    const group = poiMap.get(name);
+    if (!group) return;
+    const ring = group.userData.ring as THREE.Mesh | undefined;
+    if (!ring) return;
+    const existing = flashes.find((f) => f.ring === ring);
+    if (existing) {
+      existing.t = 0; // retrigger in place
+      return;
+    }
+    flashes.push({ ring, mat: ring.material as THREE.MeshBasicMaterial, group, t: 0 });
   }
 
   // ---------- hover / select ----------
@@ -1132,7 +1215,59 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     selected = g;
     if (g) setRingVis(g, true);
   }
+
+  // ---------- build mode (ghost hut placement) ----------
+  // invisible ground catcher: raycast target for pointer→tile mapping
+  // (Mesh.raycast ignores material.visible, so this stays hit-testable)
+  const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ visible: false }));
+  groundPlane.rotation.x = -Math.PI / 2;
+  groundPlane.position.y = 0;
+  scene.add(groundPlane);
+  const ghostMat = new THREE.MeshBasicMaterial({ color: C.roofGold, transparent: true, opacity: 0.35, depthWrite: false });
+  const ghost = new THREE.Group();
+  {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1, 1.6), ghostMat);
+    body.position.y = 0.5;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 4), ghostMat);
+    roof.scale.set(1.6 * 1.42, 0.8, 1.6 * 1.42);
+    roof.rotation.y = Math.PI / 4;
+    roof.position.y = 1.4;
+    ghost.add(body, roof);
+  }
+  ghost.visible = false;
+  scene.add(ghost);
+  let buildMode = false;
+  // Single-tile check on purpose: the town is packed (houses occupy 5×5 blocks,
+  // roads 3 tiles wide), so a 3×3 free requirement rejects nearly everything.
+  // One clear tile reads fine — dense is the aesthetic.
+  const buildValid = (x: number, z: number) => insidePlateau(x, z, 4) && isFree(x, z, 0);
+  /** Pointer → snapped ground tile via the invisible plane (null if off-world). */
+  const groundTileAt = (clientX: number, clientY: number): [number, number] | null => {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObject(groundPlane, false)[0];
+    return hit ? [Math.round(hit.point.x), Math.round(hit.point.z)] : null;
+  };
+  function setBuildMode(on: boolean) {
+    buildMode = on;
+    renderer.domElement.style.cursor = on ? 'crosshair' : 'grab';
+    if (!on) ghost.visible = false;
+  }
+
   const onMove = (e: PointerEvent) => {
+    if (buildMode) {
+      // ghost hut follows the pointer; hover rings are suppressed while placing
+      const tile = groundTileAt(e.clientX, e.clientY);
+      if (tile) {
+        ghost.visible = true;
+        ghost.position.set(tile[0], 0, tile[1]);
+        ghostMat.color.setHex(buildValid(tile[0], tile[1]) ? C.roofGold : 0xc85040);
+      } else {
+        ghost.visible = false;
+      }
+      return;
+    }
     if (e.pointerType !== 'mouse') return;
     const g = pick(e.clientX, e.clientY);
     if (g !== hovered) {
@@ -1153,6 +1288,16 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
     downAt = null;
     if (moved > 8) return;
+    if (buildMode) {
+      // build owns taps: place if valid, stay in build mode (HUD exits it)
+      const tile = groundTileAt(e.clientX, e.clientY);
+      if (tile && buildValid(tile[0], tile[1])) {
+        house(tile[0], tile[1], rng() * Math.PI * 2); // adds to scene + occupies
+        hooks.onBuilt?.(tile[0], tile[1]);
+        ghost.visible = false;
+      }
+      return;
+    }
     const g = pick(e.clientX, e.clientY);
     setSelected(g);
     if (g) {
@@ -1231,6 +1376,24 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
         markedPulse.scale.set(1, 1 + p * 0.35, 1);
       }
     }
+    // district flashes: ring 1→1.6 / opacity .9→0 + group y-pop over 1.2s
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const f = flashes[i]!;
+      f.t += dt;
+      const p = f.t / 1.2;
+      if (p >= 1) {
+        f.ring.scale.setScalar(1);
+        f.mat.opacity = 0.9;
+        f.ring.visible = selected === f.group; // restore selection ring state
+        f.group.scale.y = 1;
+        flashes.splice(i, 1);
+      } else {
+        f.ring.visible = true;
+        f.ring.scale.setScalar(1 + p * 0.6);
+        f.mat.opacity = 0.9 * (1 - p);
+        f.group.scale.y = 1 + Math.sin(p * Math.PI) * 0.06;
+      }
+    }
     // chimney smoke: motes rise and wrap 2.2..5.2
     for (let i = 1; i < smokePos.length; i += 3) {
       const y = smokePos[i]! + dt * 0.5;
@@ -1260,12 +1423,19 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     pulseMarked: () => {
       markedPulseT = 0; // restart the vigil pulse (retriggerable)
     },
+    say,
+    setBuildMode,
+    flashDistrict,
     pause: () => renderer.setAnimationLoop(null),
     resume: () => renderer.setAnimationLoop(tick),
     frame: () => tick(),
     dispose: () => {
       disposed = true;
       renderer.setAnimationLoop(null);
+      window.clearInterval(chatTimer);
+      for (const a of actors) {
+        if (a.bubbleTimer !== undefined) window.clearTimeout(a.bubbleTimer);
+      }
       ro.disconnect();
       window.removeEventListener('resize', size);
       renderer.domElement.removeEventListener('pointermove', onMove);

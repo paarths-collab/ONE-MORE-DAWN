@@ -7,11 +7,15 @@ import {
   type PoiInfo,
   type TimeOfDay,
   type VillageHandle,
+  type VillageHooks,
 } from './scene';
 
-// ONE MORE DAWN — 3D town, React edition v3. Left panel: SCENE (time of day,
-// villagers, companions). Right panel: CITY dashboard (vitals + the district
-// directory — click a district and the camera flies to it). All React state.
+// ONE MORE DAWN — 3D town, React edition v4: the self-running mini-game.
+// Left panel: SCENE (time of day, villagers, companions). Right panel: CITY
+// dashboard (live vitals + district directory) and LIVE (Marked, comments,
+// crisis, council, raid watch, events). The city now plays itself: vitals
+// drift, survivors trickle in, days count up, raids arrive and resolve
+// against your defense, and you can talk, build huts, and upgrade districts.
 
 const TIMES: { id: TimeOfDay; icon: string; label: string; tagline: string }[] = [
   { id: 'night', icon: '🌙', label: 'NIGHT', tagline: 'the city sleeps — dawn is coming' },
@@ -19,6 +23,7 @@ const TIMES: { id: TimeOfDay; icon: string; label: string; tagline: string }[] =
   { id: 'day', icon: '☀️', label: 'DAY', tagline: 'the city works while the light lasts' },
   { id: 'dusk', icon: '🌇', label: 'DUSK', tagline: 'last light — count your stores' },
 ];
+const TIME_ORDER: TimeOfDay[] = ['night', 'dawn', 'day', 'dusk'];
 
 const COMPANIONS: { id: CompanionKind; icon: string; label: string }[] = [
   { id: 'horse', icon: '🐴', label: 'HORSE' },
@@ -34,6 +39,8 @@ const COMPANIONS: { id: CompanionKind; icon: string; label: string }[] = [
 type CrisisOptId = 'a' | 'b' | 'c';
 type PlanId = 'prepare_raid' | 'stockpile_food' | 'repair_power';
 type LiveEvent = { icon: string; text: string; key: number };
+type TalkMsg = { who: string; text: string; you?: boolean; key: number };
+type RaidPhase = 'idle' | 'incoming' | 'held' | 'breach';
 
 const MARKED_GOAL = 40;
 
@@ -69,16 +76,31 @@ const DRAMA: { icon: string; text: string }[] = [
   { icon: '🌅', text: 'Dawn broke over the city — day 5, still standing.' },
 ];
 
-// Demo vitals in the game dashboard's style (static — this prototype is not
-// wired to the server).
-const VITALS: { k: string; icon: string; v: number; max: number; danger?: boolean }[] = [
-  { k: 'FOOD', icon: '🍞', v: 342, max: 500 },
-  { k: 'POWER', icon: '⚡', v: 78, max: 100 },
-  { k: 'MEDICINE', icon: '🩹', v: 12, max: 120 },
-  { k: 'MORALE', icon: '🙂', v: 44, max: 100 },
-  { k: 'THREAT', icon: '☠️', v: 68, max: 100, danger: true },
-  { k: 'DEFENSE', icon: '🛡️', v: 35, max: 100 },
+// Scripted replies to SAY HI — rotates each use.
+const HI_REPLIES: { who: string; text: string }[] = [
+  { who: 'u/ashen_fox', text: 'hii 👋 welcome to the wall' },
+  { who: 'u/quiet_marrow', text: 'gm 🌅' },
+  { who: 'u/saltcedar', text: 'stay warm out there' },
 ];
+
+// City vitals — same keys/start values as before, but live state now: ambient
+// drift, raids, builds and upgrades all move these numbers.
+type VitKey = 'FOOD' | 'POWER' | 'MEDICINE' | 'MORALE' | 'THREAT' | 'DEFENSE';
+type Vitals = Record<VitKey, number>;
+const VITAL_DEFS: { k: VitKey; icon: string; max: number; danger?: boolean }[] = [
+  { k: 'FOOD', icon: '🍞', max: 500 },
+  { k: 'POWER', icon: '⚡', max: 100 },
+  { k: 'MEDICINE', icon: '🩹', max: 120 },
+  { k: 'MORALE', icon: '🙂', max: 100 },
+  { k: 'THREAT', icon: '☠️', max: 100, danger: true },
+  { k: 'DEFENSE', icon: '🛡️', max: 100 },
+];
+const START_VITALS: Vitals = { FOOD: 342, POWER: 78, MEDICINE: 12, MORALE: 44, THREAT: 68, DEFENSE: 35 };
+const VITAL_MAX: Record<VitKey, number> = { FOOD: 500, POWER: 100, MEDICINE: 120, MORALE: 100, THREAT: 100, DEFENSE: 100 };
+const clampVit = (k: VitKey, n: number): number => Math.max(0, Math.min(VITAL_MAX[k], n));
+
+const UPGRADE_COST = 10; // food per district upgrade
+
 const vitColor = (pct: number, danger = false): string =>
   danger ? (pct >= 70 ? '#c85040' : pct >= 40 ? '#e8c34a' : '#57c06a') : pct < 25 ? '#c85040' : pct < 50 ? '#e8c34a' : '#57c06a';
 
@@ -88,18 +110,24 @@ function VillageCanvas({
   onLoad,
   onSelect,
   onPois,
+  onChat,
+  onBuilt,
 }: {
   onReady: (h: VillageHandle) => void;
   onProgress: (pct: number) => void;
   onLoad: () => void;
   onSelect: (meta: BuildingMeta | null) => void;
   onPois: (pois: PoiInfo[]) => void;
+  onChat: (who: string, text: string) => void;
+  onBuilt: (x: number, z: number) => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = mountRef.current;
     if (!el) return undefined;
-    const handle = createVillageScene(el, { onProgress, onLoad, onSelect, onPois });
+    // onChat / onBuilt are optional scene hooks (added by another agent) — the
+    // assertion keeps this compiling against either version of scene.ts.
+    const handle = createVillageScene(el, { onProgress, onLoad, onSelect, onPois, onChat, onBuilt } as VillageHooks);
     onReady(handle);
     return () => handle.dispose();
     // mount once — callbacks are stable (useCallback in App)
@@ -108,12 +136,12 @@ function VillageCanvas({
   return <div ref={mountRef} className="canvas-mount" />;
 }
 
-function TopBar() {
-  const RES: [string, string][] = [
-    ['🍞', '342'],
-    ['⚡', '78'],
-    ['🩹', '12'],
-    ['👥', '143'],
+function TopBar({ food, power, medicine, population }: { food: number; power: number; medicine: number; population: number }) {
+  const RES: [string, number][] = [
+    ['🍞', food],
+    ['⚡', power],
+    ['🩹', medicine],
+    ['👥', population],
   ];
   return (
     <div className="hud topbar">
@@ -132,16 +160,33 @@ function TopBar() {
   );
 }
 
-function DayPill({ time, auto, raidSoon }: { time: TimeOfDay; auto: boolean; raidSoon: boolean }) {
+function DayPill({
+  time,
+  auto,
+  day,
+  raidSoon,
+  raidActive,
+}: {
+  time: TimeOfDay;
+  auto: boolean;
+  day: number;
+  raidSoon: boolean;
+  raidActive: boolean;
+}) {
   const def = TIMES.find((t) => t.id === time)!;
   return (
     <div className={time === 'dawn' ? 'hud day card-bit glow' : 'hud day card-bit'}>
+      <span className="day-n">DAY {day}</span>
       <div className="dn">
         {def.icon} {def.label}
         {auto && <span className="auto-tag">AUTO</span>}
       </div>
       <div className="dt">{def.tagline}</div>
-      {raidSoon && <div className="dp-warn">⚠ raiders sighted beyond the wall</div>}
+      {raidActive ? (
+        <div className="dp-warn">⚔ RAID AT THE GATE</div>
+      ) : (
+        raidSoon && <div className="dp-warn">⚠ raiders sighted beyond the wall</div>
+      )}
     </div>
   );
 }
@@ -240,6 +285,9 @@ type LiveState = {
   pledged: number;
   pledgedToday: boolean;
   onPledge: () => void;
+  talk: TalkMsg[];
+  hiCooldown: boolean;
+  onSayHi: () => void;
   crisisVotes: Record<CrisisOptId, number>;
   myCrisisVote: CrisisOptId | null;
   onCrisisVote: (id: CrisisOptId) => void;
@@ -252,6 +300,9 @@ function LiveTab({
   pledged,
   pledgedToday,
   onPledge,
+  talk,
+  hiCooldown,
+  onSayHi,
   crisisVotes,
   myCrisisVote,
   onCrisisVote,
@@ -287,6 +338,19 @@ function LiveTab({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="p-sec">THE COMMENTS — SAY HI</div>
+      <div className="talk">
+        {talk.map((m) => (
+          <div key={m.key} className={m.you ? 'tk you' : 'tk'}>
+            <span className="ta">{m.who}</span>
+            <span className="tx">{m.text}</span>
+          </div>
+        ))}
+        <button type="button" className="say-hi" disabled={hiCooldown} onClick={onSayHi}>
+          {hiCooldown ? '…' : '👋 SAY HI IN THE COMMENTS'}
+        </button>
       </div>
 
       <div className="p-sec">TODAY'S CRISIS</div>
@@ -355,6 +419,8 @@ function CityDashboard({
   tab,
   setTab,
   pois,
+  levels,
+  vitals,
   selectedName,
   onVisit,
   live,
@@ -364,6 +430,8 @@ function CityDashboard({
   tab: 'city' | 'live';
   setTab: (t: 'city' | 'live') => void;
   pois: PoiInfo[];
+  levels: Record<string, number>;
+  vitals: Vitals;
   selectedName: string | null;
   onVisit: (name: string) => void;
   live: LiveState;
@@ -396,8 +464,9 @@ function CityDashboard({
           <>
             <div className="p-sec">CITY VITALS</div>
             <div className="vits">
-              {VITALS.map((r) => {
-                const pct = Math.min(100, (r.v / r.max) * 100);
+              {VITAL_DEFS.map((r) => {
+                const v = vitals[r.k];
+                const pct = Math.min(100, (v / r.max) * 100);
                 const col = vitColor(pct, r.danger);
                 return (
                   <div key={r.k} className="vit">
@@ -406,7 +475,7 @@ function CityDashboard({
                         {r.icon} {r.k}
                       </span>
                       <span className="v" style={{ color: col }}>
-                        {r.v}
+                        {v}
                         <em>/{r.max}</em>
                       </span>
                     </div>
@@ -431,7 +500,7 @@ function CityDashboard({
                   <span className="di">{p.icon}</span>
                   <span className="dn2">
                     {p.name}
-                    <i>LVL {p.level}</i>
+                    <i>LVL {levels[p.name] ?? p.level}</i>
                   </span>
                   <span className="go">→</span>
                 </button>
@@ -444,47 +513,92 @@ function CityDashboard({
   );
 }
 
-function BuildingChip({ meta }: { meta: BuildingMeta | null }) {
+function BuildingChip({
+  meta,
+  levels,
+  food,
+  onUpgrade,
+}: {
+  meta: BuildingMeta | null;
+  levels: Record<string, number>;
+  food: number;
+  onUpgrade: (name: string) => void;
+}) {
   const [shown, setShown] = useState<BuildingMeta | null>(meta);
   useEffect(() => {
     if (meta) setShown(meta);
   }, [meta]);
+  const level = shown ? (levels[shown.name] ?? shown.level) : 1;
+  const canAfford = food >= UPGRADE_COST;
   return (
     <div className={meta ? 'hud chip card-bit on' : 'hud chip card-bit'}>
       <div className="nm">{shown?.name ?? ''}</div>
-      <div className="lv">LEVEL {shown?.level ?? 1}</div>
+      <div className="lv">LEVEL {level}</div>
       <div className="bl">{shown?.blurb ?? ''}</div>
-      <button type="button" className="up" disabled>
-        ⬆ UPGRADE — SOON
+      <button
+        type="button"
+        className="up"
+        disabled={!canAfford}
+        title={canAfford ? undefined : 'not enough food'}
+        onClick={() => {
+          if (shown) onUpgrade(shown.name);
+        }}
+      >
+        ⬆ UPGRADE — 🍞 {UPGRADE_COST}
       </button>
     </div>
   );
 }
 
-function BuildDock() {
-  const [toast, setToast] = useState(false);
-  const timer = useRef<number | null>(null);
-  const pop = useCallback(() => {
-    setToast(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setToast(false), 2200);
-  }, []);
-  useEffect(
-    () => () => {
-      if (timer.current !== null) window.clearTimeout(timer.current);
-    },
-    [],
-  );
+function BuildDock({
+  buildMode,
+  onToggle,
+  toastText,
+  toastOn,
+}: {
+  buildMode: boolean;
+  onToggle: () => void;
+  toastText: string;
+  toastOn: boolean;
+}) {
   return (
     <div className="hud dock">
       <div className="credits">villagers &amp; wildlife: three.js example models (threejs.org)</div>
       <div style={{ position: 'relative' }}>
-        <div className={toast ? 'toast on' : 'toast'}>Building placement — coming soon</div>
-        <button type="button" className="build" onClick={pop} aria-label="Build">
+        <div className={toastOn ? 'toast on' : 'toast'}>{toastText}</div>
+        <button
+          type="button"
+          className={buildMode ? 'build armed' : 'build'}
+          onClick={onToggle}
+          aria-label="Build"
+          aria-pressed={buildMode}
+        >
           🔨
         </button>
       </div>
       <span className="btag">BUILD</span>
+    </div>
+  );
+}
+
+function RaidBanner({ phase }: { phase: RaidPhase }) {
+  const cls =
+    phase === 'idle'
+      ? 'hud raid-banner card-bit'
+      : phase === 'breach'
+        ? 'hud raid-banner card-bit on bad'
+        : 'hud raid-banner card-bit on';
+  const title = phase === 'held' ? '🛡 THE WALL HELD' : phase === 'breach' ? '🔥 THE WALL WAS BREACHED' : '⚔ RAID AT THE GATE';
+  const sub =
+    phase === 'held'
+      ? 'threat −38 · defense −8 · food −6'
+      : phase === 'breach'
+        ? '−8 souls · food −18 · defense −15'
+        : 'the wall decides tonight…';
+  return (
+    <div className={cls}>
+      <div className="rb-t">{title}</div>
+      <div className="rb-s">{sub}</div>
     </div>
   );
 }
@@ -519,6 +633,20 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [dashOpen, setDashOpen] = useState(true);
   const [dashTab, setDashTab] = useState<'city' | 'live'>('live');
+  // ---- the mini-game state machines ----
+  const [vitals, setVitals] = useState<Vitals>(START_VITALS);
+  const [population, setPopulation] = useState(143);
+  const [day, setDay] = useState(5);
+  const [levels, setLevels] = useState<Record<string, number>>({});
+  const [buildMode, setBuildMode] = useState(false);
+  const [raidPhase, setRaidPhase] = useState<RaidPhase>('idle');
+  const [talk, setTalk] = useState<TalkMsg[]>(() => [
+    { who: 'u/saltcedar', text: 'watch fires lit, see you at dawn 🔥', key: 1 },
+    { who: 'u/ashen_fox', text: "gm city, who's on wall duty?", key: 0 },
+  ]);
+  const [hiCooldown, setHiCooldown] = useState(false);
+  const [toastText, setToastText] = useState('');
+  const [toastOn, setToastOn] = useState(false);
   // LIVE tab state — all demo numbers, drifting on timers.
   const [pledged, setPledged] = useState(23);
   const [pledgedToday, setPledgedToday] = useState(false);
@@ -537,6 +665,49 @@ export function App() {
   const pledgedRef = useRef(false); // click guard (double-tap before re-render)
   const votedRef = useRef(false);
   const nextEvRef = useRef(3);
+  const evKeyRef = useRef(100); // monotonic key for every feed entry
+  const talkKeyRef = useRef(10);
+  const timeRef = useRef<TimeOfDay>('dawn'); // current phase, readable inside intervals
+  const dayRef = useRef(5);
+  const vitalsRef = useRef<Vitals>(START_VITALS); // fresh reads in callbacks/timers
+  const levelsRef = useRef<Record<string, number>>({});
+  const buildModeRef = useRef(false);
+  const raidPhaseRef = useRef<RaidPhase>('idle');
+  const raidDaysRef = useRef(5);
+  const raidTimersRef = useRef<number[]>([]);
+  const hiCooldownRef = useRef(false);
+  const hiReplyIdxRef = useRef(0);
+  const hiReplyTimerRef = useRef<number | null>(null);
+  const hiCooldownTimerRef = useRef<number | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    timeRef.current = time;
+  }, [time]);
+  useEffect(() => {
+    vitalsRef.current = vitals;
+  }, [vitals]);
+  useEffect(() => {
+    levelsRef.current = levels;
+  }, [levels]);
+
+  // ---- feed helpers ----
+  const pushEvent = useCallback((icon: string, text: string) => {
+    const key = evKeyRef.current;
+    evKeyRef.current += 1;
+    setEvents((prev) => [{ icon, text, key }, ...prev].slice(0, 6));
+  }, []);
+  const pushTalk = useCallback((who: string, text: string, you = false) => {
+    const key = talkKeyRef.current;
+    talkKeyRef.current += 1;
+    setTalk((prev) => [{ who, text, you, key }, ...prev].slice(0, 7));
+  }, []);
+  const popToast = useCallback((text: string) => {
+    setToastText(text);
+    setToastOn(true);
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToastOn(false), 2200);
+  }, []);
 
   const onReady = useCallback((h: VillageHandle) => {
     handleRef.current = h;
@@ -544,9 +715,40 @@ export function App() {
   const onProgress = useCallback((p: number) => setPct(p), []);
   const onLoad = useCallback(() => setLoaded(true), []);
   const onSelect = useCallback((meta: BuildingMeta | null) => setSelected(meta), []);
-  const onPois = useCallback((list: PoiInfo[]) => setPois(list), []);
+  const onPois = useCallback((list: PoiInfo[]) => {
+    setPois(list);
+    // seed the live level map from the scene directory (never clobber upgrades)
+    setLevels((prev) => {
+      const next = { ...prev };
+      for (const p of list) if (next[p.name] === undefined) next[p.name] = p.level;
+      return next;
+    });
+  }, []);
+
+  // scene-generated villager chatter → the comments feed
+  const onChat = useCallback(
+    (who: string, text: string) => {
+      pushTalk(who, text);
+    },
+    [pushTalk],
+  );
+
+  // scene reports a placed hut → grow the city, spend food, exit build mode
+  const onBuilt = useCallback(
+    (x: number, _z: number) => {
+      setPopulation((p) => p + 4);
+      setVitals((v) => ({ ...v, FOOD: clampVit('FOOD', v.FOOD - 5) }));
+      pushEvent('🔨', `A new hut rose in the ${x < 0 ? 'west' : 'east'} quarter — a family moves in.`);
+      popToast('Hut raised — +4 souls');
+      buildModeRef.current = false;
+      setBuildMode(false);
+      (handleRef.current as any)?.setBuildMode?.(false);
+    },
+    [pushEvent, popToast],
+  );
 
   const setTime = useCallback((t: TimeOfDay) => {
+    timeRef.current = t;
     setTimeState(t);
     handleRef.current?.setTimeOfDay(t);
   }, []);
@@ -574,18 +776,22 @@ export function App() {
   }, []);
 
   // AUTO: the day slowly turns — night → dawn → day → dusk, ~12s per phase.
+  // Each transition INTO dawn is a new day: day counter +1 + a chronicle line.
   useEffect(() => {
     if (!auto) return undefined;
-    const order: TimeOfDay[] = ['night', 'dawn', 'day', 'dusk'];
     const id = window.setInterval(() => {
-      setTimeState((cur) => {
-        const next = order[(order.indexOf(cur) + 1) % order.length]!;
-        handleRef.current?.setTimeOfDay(next);
-        return next;
-      });
+      const next = TIME_ORDER[(TIME_ORDER.indexOf(timeRef.current) + 1) % TIME_ORDER.length]!;
+      timeRef.current = next;
+      setTimeState(next);
+      handleRef.current?.setTimeOfDay(next);
+      if (next === 'dawn') {
+        dayRef.current += 1;
+        setDay(dayRef.current);
+        pushEvent('🌅', `Dawn broke over the city — day ${dayRef.current}, still standing.`);
+      }
     }, 12000);
     return () => window.clearInterval(id);
-  }, [auto]);
+  }, [auto, pushEvent]);
 
   // AUTO: villager count random-walks ±1 within [3, MAX_VILLAGERS] every ~6s.
   // Holds off while manualPauseRef says a human just used the stepper.
@@ -614,9 +820,105 @@ export function App() {
     setCrisisVotes((v) => ({ ...v, [id]: v[id] + 1 }));
   }, []);
 
+  // SAY HI — post to the comments, wave in the scene, get a scripted reply.
+  const onSayHi = useCallback(() => {
+    if (hiCooldownRef.current) return;
+    hiCooldownRef.current = true;
+    setHiCooldown(true);
+    pushTalk('u/you', 'hii 👋', true);
+    (handleRef.current as any)?.say?.('hii 👋');
+    const reply = HI_REPLIES[hiReplyIdxRef.current % HI_REPLIES.length]!;
+    hiReplyIdxRef.current += 1;
+    if (hiReplyTimerRef.current !== null) window.clearTimeout(hiReplyTimerRef.current);
+    hiReplyTimerRef.current = window.setTimeout(() => {
+      pushTalk(reply.who, reply.text);
+      (handleRef.current as any)?.say?.(reply.text);
+    }, 2500);
+    if (hiCooldownTimerRef.current !== null) window.clearTimeout(hiCooldownTimerRef.current);
+    hiCooldownTimerRef.current = window.setTimeout(() => {
+      hiCooldownRef.current = false;
+      setHiCooldown(false);
+    }, 6000);
+  }, [pushTalk]);
+
+  // BUILD — toggle placement mode in the scene (fallback toast if the scene
+  // API isn't there yet).
+  const toggleBuild = useCallback(() => {
+    const h = handleRef.current as any;
+    if (!h?.setBuildMode) {
+      popToast('Building placement — coming soon');
+      return;
+    }
+    const on = !buildModeRef.current;
+    buildModeRef.current = on;
+    setBuildMode(on);
+    h.setBuildMode?.(on);
+  }, [popToast]);
+
+  // UPGRADE — bump a district's level for food; flash it in the scene.
+  const onUpgrade = useCallback(
+    (name: string) => {
+      if (vitalsRef.current.FOOD < UPGRADE_COST) return;
+      const n = (levelsRef.current[name] ?? 1) + 1;
+      setLevels((prev) => ({ ...prev, [name]: n }));
+      setVitals((v) => ({ ...v, FOOD: clampVit('FOOD', v.FOOD - UPGRADE_COST) }));
+      (handleRef.current as any)?.flashDistrict?.(name);
+      pushEvent('⬆', `${name} upgraded to LVL ${n}.`);
+    },
+    [pushEvent],
+  );
+
+  // RAID — 9s of dread, then the wall decides on CURRENT defense.
+  const startRaid = useCallback(() => {
+    if (raidPhaseRef.current !== 'idle') return;
+    raidPhaseRef.current = 'incoming';
+    setRaidPhase('incoming');
+    (handleRef.current as any)?.setRaidWatch?.(true);
+    raidTimersRef.current.push(
+      window.setTimeout(() => {
+        const held = vitalsRef.current.DEFENSE >= 40;
+        if (held) {
+          setVitals((v) => ({
+            ...v,
+            THREAT: clampVit('THREAT', 30),
+            DEFENSE: clampVit('DEFENSE', v.DEFENSE - 8),
+            FOOD: clampVit('FOOD', v.FOOD - 6),
+          }));
+          pushEvent('🛡', 'The raiders broke on the south wall. The city holds.');
+          raidPhaseRef.current = 'held';
+          setRaidPhase('held');
+        } else {
+          setPopulation((p) => Math.max(0, p - 8));
+          setVitals((v) => ({
+            ...v,
+            THREAT: clampVit('THREAT', 45),
+            DEFENSE: clampVit('DEFENSE', v.DEFENSE - 15),
+            FOOD: clampVit('FOOD', v.FOOD - 18),
+            MORALE: clampVit('MORALE', v.MORALE - 10),
+          }));
+          pushEvent('🔥', 'Raiders breached the gate before the watch pushed them out.');
+          raidPhaseRef.current = 'breach';
+          setRaidPhase('breach');
+        }
+        // result banner lingers 6s, then the countdown resets
+        raidTimersRef.current.push(
+          window.setTimeout(() => {
+            raidPhaseRef.current = 'idle';
+            setRaidPhase('idle');
+            (handleRef.current as any)?.setRaidWatch?.(false);
+            raidDaysRef.current = 5;
+            setRaidDays(5);
+          }, 6000),
+        );
+      }, 9000),
+    );
+  }, [pushEvent]);
+
   // LIVE tab simulation — every number drifts on its own clock:
   //   pledges +1 / ~7s · crisis votes +1 / ~9s · council votes +1 / ~11s ·
-  //   raid countdown −1 / 48s (wraps 0 → 5) · event feed rotates / ~8s.
+  //   raid countdown −1 / 48s (threat creeps +2 per tick; at 0 the raid plays
+  //   out) · event feed rotates / ~8s · ambient vitals drift / 20s ·
+  //   a survivor reaches the gate / ~25s.
   useEffect(() => {
     const ids: number[] = [
       window.setInterval(() => setPledged((p) => Math.min(MARKED_GOAL, p + 1)), 7000),
@@ -628,29 +930,90 @@ export function App() {
         const id = PLAN_IDS[Math.floor(Math.random() * PLAN_IDS.length)]!;
         setCouncilVotes((v) => ({ ...v, [id]: v[id] + 1 }));
       }, 11000),
-      window.setInterval(() => setRaidDays((d) => (d <= 0 ? 5 : d - 1)), 48000),
+      window.setInterval(() => {
+        setVitals((v) => ({ ...v, THREAT: clampVit('THREAT', v.THREAT + 2) }));
+        if (raidPhaseRef.current !== 'idle') return; // a raid is already playing out
+        const d = raidDaysRef.current - 1;
+        if (d <= 0) {
+          raidDaysRef.current = 0;
+          setRaidDays(0);
+          startRaid();
+        } else {
+          raidDaysRef.current = d;
+          setRaidDays(d);
+        }
+      }, 48000),
       window.setInterval(() => {
         const idx = nextEvRef.current;
         nextEvRef.current = idx + 1;
         const src = DRAMA[idx % DRAMA.length]!;
-        setEvents((prev) => [{ icon: src.icon, text: src.text, key: idx }, ...prev].slice(0, 6));
+        pushEvent(src.icon, src.text);
       }, 8000),
+      // ambient vitals drift: food −1..+2, power ±1, clamped ≥ 0
+      window.setInterval(() => {
+        setVitals((v) => ({
+          ...v,
+          FOOD: clampVit('FOOD', v.FOOD + (Math.floor(Math.random() * 4) - 1)),
+          POWER: clampVit('POWER', v.POWER + (Math.random() < 0.5 ? -1 : 1)),
+        }));
+      }, 20000),
+      // a survivor reaches the gate every ~25s
+      window.setInterval(() => {
+        setPopulation((p) => p + 1);
+        pushEvent('🚶', 'a survivor reaches the gate');
+      }, 25000),
     ];
     return () => ids.forEach((id) => window.clearInterval(id));
-  }, []);
+  }, [pushEvent, startRaid]);
 
-  // Raid watch → optional scene API (defensive: the handle may not have it).
+  // one-shot timers (say-hi reply/cooldown, toast, raid sequence) — swept on unmount
+  useEffect(
+    () => () => {
+      if (hiReplyTimerRef.current !== null) window.clearTimeout(hiReplyTimerRef.current);
+      if (hiCooldownTimerRef.current !== null) window.clearTimeout(hiCooldownTimerRef.current);
+      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+      raidTimersRef.current.forEach((id) => window.clearTimeout(id));
+      raidTimersRef.current = [];
+    },
+    [],
+  );
+
+  // Raid watch ambience → optional scene API (defensive: the handle may not
+  // have it). The active raid sequence drives setRaidWatch itself.
   useEffect(() => {
+    if (raidPhaseRef.current !== 'idle') return;
     const h = handleRef.current as any;
     if (raidDays <= 1) h?.setRaidWatch?.(true);
     else if (raidDays >= 5) h?.setRaidWatch?.(false);
   }, [raidDays, loaded]);
 
+  // QA hooks: window.__omdDemo.raidNow() / .build()
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__omdDemo = {
+      raidNow: () => {
+        raidDaysRef.current = 0;
+        setRaidDays(0); // next countdown tick fires the raid
+      },
+      build: () => toggleBuild(),
+    };
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__omdDemo;
+    };
+  }, [toggleBuild]);
+
   return (
     <>
-      <VillageCanvas onReady={onReady} onProgress={onProgress} onLoad={onLoad} onSelect={onSelect} onPois={onPois} />
-      <TopBar />
-      <DayPill time={time} auto={auto} raidSoon={raidDays <= 1} />
+      <VillageCanvas
+        onReady={onReady}
+        onProgress={onProgress}
+        onLoad={onLoad}
+        onSelect={onSelect}
+        onPois={onPois}
+        onChat={onChat}
+        onBuilt={onBuilt}
+      />
+      <TopBar food={vitals.FOOD} power={vitals.POWER} medicine={vitals.MEDICINE} population={population} />
+      <DayPill time={time} auto={auto} day={day} raidSoon={raidDays <= 1} raidActive={raidPhase === 'incoming'} />
       <ScenePanel
         open={panelOpen}
         setOpen={setPanelOpen}
@@ -669,12 +1032,17 @@ export function App() {
         tab={dashTab}
         setTab={setDashTab}
         pois={pois}
+        levels={levels}
+        vitals={vitals}
         selectedName={selected?.name ?? null}
         onVisit={visitDistrict}
         live={{
           pledged,
           pledgedToday,
           onPledge,
+          talk,
+          hiCooldown,
+          onSayHi,
           crisisVotes,
           myCrisisVote,
           onCrisisVote,
@@ -683,9 +1051,14 @@ export function App() {
           events,
         }}
       />
-      <BuildingChip meta={selected} />
-      <BuildDock />
-      <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a district</div>
+      <BuildingChip meta={selected} levels={levels} food={vitals.FOOD} onUpgrade={onUpgrade} />
+      <BuildDock buildMode={buildMode} onToggle={toggleBuild} toastText={toastText} toastOn={toastOn} />
+      <RaidBanner phase={raidPhase} />
+      {buildMode ? (
+        <div className="hud build-hint card-bit">🔨 tap open ground to raise a hut · tap BUILD to cancel</div>
+      ) : (
+        <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a district</div>
+      )}
       <Loader pct={pct} done={loaded} />
     </>
   );

@@ -131,11 +131,52 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 /* ---- day pill: raid warning line ---- */
 .dp-warn { font-family: var(--pixel); font-size: 7px; color: #e08a7a; margin-top: 3px; letter-spacing: 0.5px; }
 
+/* ---- day pill: day counter ---- */
+.day .day-n { display: block; font-family: var(--pixel); font-size: 8px; letter-spacing: 2px; color: var(--ink); margin-bottom: 2px; }
+
+/* ---- LIVE tab: talk / comments ---- */
+.talk { display: flex; flex-direction: column; gap: 6px; }
+.tk { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid #241f1a; border-radius: 9px; }
+.tk .ta { font-family: var(--pixel); font-size: 7px; color: #6c8be0; letter-spacing: 0.5px; }
+.tk .tx { font-family: var(--mono); font-size: 10px; color: var(--ink); line-height: 1.35; }
+.tk.you { border-color: var(--line); background: rgba(232, 195, 74, 0.07); }
+.tk.you .ta { color: var(--gold); }
+.say-hi { margin-top: 2px; width: 100%; font-family: var(--pixel); font-size: 8.5px; letter-spacing: 1px; color: #0c0a0a; background: linear-gradient(180deg, #f5d76e, #c99a2e); border: 1px solid #7a6120; border-radius: 10px; padding: 8px; cursor: pointer; }
+.say-hi:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- build mode ---- */
+.build.armed { outline: 3px solid #57c06a; outline-offset: 2px; animation: buildPulse 1.2s ease-in-out infinite; }
+@keyframes buildPulse {
+  0%, 100% { box-shadow: 0 4px 0 #5c4a14, 0 0 0 0 rgba(87, 192, 106, 0.5); }
+  50% { box-shadow: 0 4px 0 #5c4a14, 0 0 0 12px rgba(87, 192, 106, 0); }
+}
+.build-hint { bottom: 14px; left: 50%; transform: translateX(-50%); border-radius: 99px; padding: 9px 18px; font-family: var(--pixel); font-size: 9px; letter-spacing: 0.5px; color: #a9ebc6; border-color: #2e5b2c !important; }
+
+/* ---- raid banner (center-screen) ---- */
+.raid-banner { top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.9); text-align: center; padding: 18px 30px; border-radius: 16px; border: 2px solid #5e2a22 !important; background: rgba(26, 10, 8, 0.92) !important; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none !important; }
+.raid-banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.rb-t { font-family: var(--pixel); font-size: 18px; letter-spacing: 2px; color: #e08a7a; text-shadow: 0 0 18px rgba(200, 80, 64, 0.6); }
+.rb-s { font-family: var(--mono); font-size: 11px; color: var(--mut); margin-top: 8px; }
+.raid-banner.bad .rb-t { color: #ff5b4d; }
+.raid-banner.bad { animation: raidShake 0.5s ease-in-out 2; }
+@keyframes raidShake {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  20% { transform: translate(calc(-50% - 4px), -50%) scale(1); }
+  40% { transform: translate(calc(-50% + 4px), -50%) scale(1); }
+  60% { transform: translate(calc(-50% - 4px), -50%) scale(1); }
+  80% { transform: translate(calc(-50% + 4px), -50%) scale(1); }
+}
+
 /* ---- POI banner labels (CSS2DRenderer layer) ---- */
 .poi-layer { z-index: 3; }
 .poi-label { pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: var(--pixel); font-size: 8.5px; letter-spacing: 1px; color: var(--gold); background: rgba(20, 16, 13, 0.88); border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; white-space: nowrap; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5); transition: border-color 0.15s, color 0.15s; }
 .poi-label .ic { font-size: 12px; }
 .poi-label:hover { border-color: var(--gold); color: #ffe9ad; }
+
+/* ---- villager speech bubbles (CSS2DRenderer layer — appearance only) ---- */
+.v-bubble { position: relative; pointer-events: none; font-family: var(--mono); font-size: 10px; color: #221607; background: rgba(244, 234, 216, 0.95); border-radius: 10px; padding: 5px 9px; max-width: 150px; width: max-content; white-space: normal; line-height: 1.35; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); opacity: 0; scale: 0.8; transition: opacity 0.2s, scale 0.2s; }
+.v-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: rgba(244, 234, 216, 0.95); border-bottom: none; }
+.v-bubble.on { opacity: 1; scale: 1; }
 
 .loader { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #0c0a0a; transition: opacity 0.4s; color: var(--ink); }
 .loader.done { opacity: 0; pointer-events: none; }
@@ -225,4 +266,10 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
   .dock .credits { display: none; }
 
   .poi-label { font-size: 7px; padding: 3px 6px; }
+
+  .raid-banner { top: 40%; padding: 12px 20px; }
+  .rb-t { font-size: 13px; }
+  .build-hint { bottom: 6px; font-size: 8px; padding: 7px 12px; }
+  .v-bubble { font-size: 8.5px; max-width: 110px; }
+  .day .day-n { font-size: 7px; }
 }
