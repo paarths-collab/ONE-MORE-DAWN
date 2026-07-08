@@ -139,11 +139,27 @@ describe('Store', () => {
     expect(loaded?.trait).toBe('frozen');
   });
 
+  it('returns undefined for malformed stored city JSON', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    await redis.set('city:state', '{bad');
+    expect(await store.getCityState()).toBeUndefined();
+  });
+
   it('round-trips player profiles in the players hash', async () => {
     const store = new Store(makeFakeRedis());
     expect(await store.getPlayer('t2_abc')).toBeUndefined();
     await store.savePlayer(player);
     expect(await store.getPlayer('t2_abc')).toEqual(player);
+  });
+
+  it('skips malformed stored player JSON', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    await store.savePlayer(player);
+    await redis.hSet('players', { t2_bad: '{bad' });
+    expect(await store.getPlayer('t2_bad')).toBeUndefined();
+    expect(await store.getAllPlayers()).toEqual([player]);
   });
 
   it('backfills roleRep/title when reading legacy player JSON', async () => {
@@ -267,6 +283,14 @@ describe('Store', () => {
     expect(entries.map((e) => e.day)).toEqual([2, 1]);
   });
 
+  it('skips malformed timeline entries', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    await store.appendTimeline({ day: 1, cycle: 1, headline: 'Day 1', events: [], deltas: {}, crisisId: 'first_light', winningOptionId: null });
+    await redis.hSet('timeline', { bad: '{bad' });
+    expect((await store.getTimeline(10)).map((e) => e.day)).toEqual([1]);
+  });
+
   it('returns top contributors highest-first, capped at the limit', async () => {
     const store = new Store(makeFakeRedis());
     await store.addContribution('t2_a', 30);
@@ -319,12 +343,31 @@ describe('Store', () => {
     expect(await store.getPledgers(2)).toEqual({ t2_abc: entry });
   });
 
+  it('skips malformed pledger entries', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    const entry = { kind: 'run_messages' as const, name: 'ali•••', at: 42, contribution: 30 };
+    await store.recordPledger(2, 't2_abc', entry);
+    await redis.hSet('day:2:pledgers', { t2_bad: '{bad' });
+    expect(await store.getPledger(2, 't2_bad')).toBeUndefined();
+    expect(await store.getPledgers(2)).toEqual({ t2_abc: entry });
+  });
+
   it('round-trips the marked dawn outcome by day (null when unresolved)', async () => {
     const store = new Store(makeFakeRedis());
     expect(await store.getMarkedOutcome(1)).toBeNull();
     await store.setMarkedOutcome(1, { name: 'The North Wall', saved: true });
     expect(await store.getMarkedOutcome(1)).toEqual({ name: 'The North Wall', saved: true });
     expect(await store.getMarkedOutcome(2)).toBeNull();
+  });
+
+  it('ignores malformed marked outcomes', async () => {
+    const redis = makeFakeRedis();
+    const store = new Store(redis);
+    await store.setMarkedOutcome(1, { name: 'The North Wall', saved: true });
+    await redis.hSet('marked:outcomes', { '2': '{bad' });
+    expect(await store.getMarkedOutcome(2)).toBeNull();
+    expect(await store.countMarkedSaved()).toBe(1);
   });
 
   it('ranks contributors 1-based; null when unranked', async () => {

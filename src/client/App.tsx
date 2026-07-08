@@ -11,6 +11,7 @@ import {
 } from './scene';
 import { ApiFailure, getInit, getLeaderboard, getWorld, postAction, postAvatar, postPledge, postRole, postStrategy, postVote } from './api';
 import { isLocalHarnessHost, raidNoteFromEvents, worldUnavailableMessage } from './liveUi';
+import { isMuted, playSound, preloadSounds, toggleMuted } from './sound';
 import type {
   ActionType,
   Crisis,
@@ -139,9 +140,8 @@ const WM_HUTS_BIG: [number, number][] = [
   [1.7, 1.8],
 ];
 
-// ---------- LIVE tab demo data (copied from the game's mock fixtures in
-// src/client/game/api.ts + src/client/react/defs.ts — this prototype is not
-// wired to the server, so the numbers drift on timers instead).
+// ---------- LIVE tab demo data (copied from the local mock fixtures; live mode
+// uses the Devvit API, while demo mode lets the town drift on timers).
 
 type CrisisOptId = 'a' | 'b' | 'c';
 type PlanId = 'prepare_raid' | 'stockpile_food' | 'repair_power';
@@ -196,7 +196,7 @@ const MARKED_ICONS: Record<Marked['kind'], string> = { person: '🧒', place: '�
 
 // First-run onboarding role catalog — icon/label/blurb, exact copy per spec.
 const ROLE_CATALOG: { id: Role; icon: string; label: string; blurb: string }[] = [
-  { id: 'scout', icon: '🧭', label: 'SCOUT', blurb: 'Runs the ruins for loot — best on expeditions.' },
+  { id: 'scout', icon: '🧭', label: 'SCOUT', blurb: 'Tracks danger and helps the city read the map.' },
   { id: 'engineer', icon: '🔧', label: 'ENGINEER', blurb: '+50% when you Repair Power.' },
   { id: 'medic', icon: '⛑️', label: 'MEDIC', blurb: '+50% when you Treat the Sick.' },
   { id: 'farmer', icon: '🌾', label: 'FARMER', blurb: '+50% when you Grow Food.' },
@@ -673,7 +673,7 @@ function TopTab({ contribs, lb }: { contribs: Record<string, Contrib>; lb: Leade
           ))}
         </div>
         <div className="p-sec">CITY TOTALS</div>
-        <div className="lb-total">every action, pledge and expedition counts toward the ledger</div>
+        <div className="lb-total">every action, pledge and council stand counts toward the ledger</div>
       </>
     );
   }
@@ -1183,9 +1183,9 @@ function BuildDock({
   );
 }
 
-// DAWN ACTIONS hotbar — once each per day, plus the scavenge route picker.
+// DAWN ACTIONS hotbar — once each per day, plus the demo-only route picker.
 // Live mode: buttons post to the real API, an energy pill shows what's left,
-// and SCAVENGE is hidden (the mission minigame isn't ported to the 3D town).
+// and SCAVENGE stays hidden for V1 (the mission minigame isn't ported to town).
 function Hotbar({
   used,
   onAction,
@@ -1651,6 +1651,11 @@ function Onboarding({
         <button type="button" className="p-x" onClick={onDismiss} aria-label="Dismiss onboarding">
           ✕
         </button>
+        <div className="ob-sub" style={{ color: 'var(--ink)', marginTop: 0, marginBottom: 10 }}>
+          This subreddit is a shared city trying to survive one more dawn. Everyone gets one meaningful
+          action a day. Vote on the crisis, pledge to save The Marked, and hold the wall — then come back
+          at dawn to see what the community's choices did. The city remembers.
+        </div>
         <div className="ob-title">CHOOSE YOUR ROLE</div>
         <div className="ob-sub">Your role shapes what you're best at. You can change it later.</div>
         <div className="ob-roles">
@@ -1801,6 +1806,7 @@ export function App() {
   // Fallen-city terminal state (live only): city.status === 'fallen'.
   const [cityFallen, setCityFallen] = useState(false);
   const [liveTimelineHeadline, setLiveTimelineHeadline] = useState<string | null>(null);
+  const [muted, setMutedUi] = useState(isMuted()); // global SFX mute (persisted)
   const handleRef = useRef<VillageHandle | null>(null);
   const cityFallenRef = useRef(false); // fallen state, readable inside handlers/timers
   const modeRef = useRef<Mode>('connecting'); // current mode, readable inside timers
@@ -1961,7 +1967,10 @@ export function App() {
       }
       if (init.dawnReport) {
         setDawnReport(init.dawnReport);
-        if ((first && init.firstVisitToday) || dayIncreased) setDawnTeaserOpen(true);
+        if ((first && init.firstVisitToday) || dayIncreased) {
+          setDawnTeaserOpen(true);
+          playSound('dawn_report');
+        }
       }
       if (dayIncreased) {
         pushNotif('🌅', `dawn breaks — day ${city.day}`);
@@ -2010,6 +2019,23 @@ export function App() {
       cancelled = true;
     };
   }, [applyInit, pushNotif]);
+
+  // ---- V1 sound cues (local files, fail-silent; mute persists in localStorage) ----
+  useEffect(() => {
+    preloadSounds();
+  }, []);
+  // Boolean state → the effect only re-fires on a real transition (no repeat on poll).
+  useEffect(() => {
+    if (cityFallen) playSound('city_fallen');
+  }, [cityFallen]);
+  useEffect(() => {
+    if (liveRaidLikely) playSound('raid_warning');
+  }, [liveRaidLikely]);
+  const onToggleMute = useCallback(() => {
+    const next = toggleMuted();
+    setMutedUi(next);
+    if (!next) playSound('button_click'); // give audible feedback only when unmuting
+  }, []);
 
   // WORLD map (live): real cities from /api/world; any failure or an
   // ineligible sub falls back to the fictional charts with a caption.
@@ -2085,6 +2111,7 @@ export function App() {
   // ---- LIVE mode mutations (each guards the poll + double-taps via mutatingRef) ----
   const toastFailure = useCallback(
     (err: unknown, fallback: string) => {
+      playSound('error_soft');
       popToast(err instanceof ApiFailure ? err.message : fallback);
     },
     [popToast],
@@ -2098,6 +2125,7 @@ export function App() {
         .then((res) => {
           setLiveCrisisVotes(res.crisisVotes);
           setLiveMyVote(res.yourCrisisVote);
+          playSound('vote_cast');
           pushNotif('🗳️', 'your vote is in', 'good');
         })
         .catch((err) => toastFailure(err, 'vote failed — try again'))
@@ -2116,6 +2144,7 @@ export function App() {
         .then((res) => {
           setLiveMarked(res.marked);
           setLivePledge(res.pledge);
+          playSound('pledge');
           pushNotif('🕯️', `you pledged for ${res.marked.name}`, 'good');
           handleRef.current?.pulseMarked?.();
         })
@@ -2136,6 +2165,7 @@ export function App() {
         .then((res) => {
           setLiveStrategyVotes(res.strategyVotes);
           setLiveMyPlan(res.yourStrategyVote);
+          playSound('vote_cast');
           pushNotif('📜', 'the council heard you', 'good');
         })
         .catch((err) => toastFailure(err, 'the council is busy — try again'))
@@ -2422,6 +2452,7 @@ export function App() {
           .then((res) => {
             setLiveEnergy({ effective: res.effectiveEnergy, used: res.player.energyUsedToday });
             setLiveActions(res.yourActionsToday);
+            playSound('action_confirm');
             pushNotif('✅', 'your work lands at the next dawn', 'good');
             if (res.unlockedTitle) pushNotif('🏅', `title unlocked — ${res.unlockedTitle}`, 'good');
             const liveFrags = ACTION_FLASH[id] ?? [];
@@ -2470,9 +2501,10 @@ export function App() {
     [addContrib, pushEvent, pushNotif],
   );
 
-  // SCAVENGE — one scout out at a time; loot (and risk) lands when they return.
+  // Demo-only SCAVENGE — live V1 never opens this flow.
   const runScavenge = useCallback(
     (id: RouteId) => {
+      if (modeRef.current === 'live') return;
       if (scoutingRef.current) return;
       const route = ROUTES.find((r) => r.id === id);
       if (!route) return;
@@ -2846,6 +2878,16 @@ export function App() {
         aria-expanded={statsOpen}
       >
         📊 STATS
+      </button>
+      <button
+        type="button"
+        className="hud mute-fab card-bit"
+        onClick={onToggleMute}
+        aria-pressed={muted}
+        aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+        title={muted ? 'Sound off' : 'Sound on'}
+      >
+        {muted ? '🔇' : '🔊'}
       </button>
       <StatsModal
         open={statsOpen}

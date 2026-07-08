@@ -692,7 +692,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     g.add(box(3.4, 1.4, 1.8, MAT.timber, 0.7, 0.7, 1.6));
     g.add(pyramid(3.8, 1.0, 2.2, MAT.roofBrown, 0.7, 1.85, 1.6));
     for (const [bx, bz] of [[2.4, -0.4], [2.9, 0.3], [2.2, 0.8]] as const) g.add(cyl(0.3, 0.6, MAT.timberDark, bx, 0.3, bz, 8));
-    register(g, x, z, { name: 'STORAGE', level: 3, blurb: 'Every loaf the expeditions bank sleeps behind these doors.' }, 4.0, { icon: '📦', y: 3.6 });
+    register(g, x, z, { name: 'STORAGE', level: 3, blurb: 'Every loaf the city saves sleeps behind these doors.' }, 4.0, { icon: '📦', y: 3.6 });
   }
   // PRODUCTION — mill + fields west
   let rotor: THREE.Group | null = null;
