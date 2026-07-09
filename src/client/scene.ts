@@ -1929,13 +1929,18 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
         ringHouse(g);
         labelHouse(g, 'u/you', 2.7);
       }
-      // named top contributors
+      // named top contributors — scale all by tier, but only label the top few so
+      // the skyline doesn't drown in username banners.
+      let labelled = 0;
       for (const n of summary.named ?? []) {
         if (n.index <= 0 || n.index >= total) continue;
         if (yours && n.index === yours.index) continue; // already labelled as yours
         const g = houses[n.index]!;
         g.scale.setScalar(scaleFor(n.tier));
-        labelHouse(g, `u/${n.username}`, 2.6);
+        if (labelled < 3) {
+          labelHouse(g, `u/${n.username}`, 2.6);
+          labelled++;
+        }
       }
     } catch {
       /* cosmetic overlay — never throw into the caller */

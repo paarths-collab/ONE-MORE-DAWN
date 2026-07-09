@@ -2650,6 +2650,15 @@ export function App() {
     handleRef.current?.setHouses?.(houses);
   }, [houses, loaded]);
 
+  // Declutter: the floating in-world district/house banner labels are redundant
+  // (and overlap in a narrow webview) while the CITY dashboard panel is open, so
+  // fade them out then. CSS wins over the CSS2DRenderer's inline display.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('omd-hide-labels', dashOpen);
+    return () => root.classList.remove('omd-hide-labels');
+  }, [dashOpen]);
+
   const visitDistrict = useCallback((name: string) => {
     handleRef.current?.focusOn(name);
   }, []);
