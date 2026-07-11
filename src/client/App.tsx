@@ -453,7 +453,7 @@ function VillageCanvas({
   return <div ref={mountRef} className="canvas-mount" />;
 }
 
-function TopBar({ vitals, population, subtitle }: { vitals: Vitals; population: number; subtitle: string }) {
+function TopBar({ vitals, population, subtitle, cityName }: { vitals: Vitals; population: number; subtitle: string; cityName: string | null }) {
   const RES: [string, number][] = [
     ['🍞', vitals.FOOD],
     ['⚡', vitals.POWER],
@@ -466,7 +466,7 @@ function TopBar({ vitals, population, subtitle }: { vitals: Vitals; population: 
   return (
     <div className="hud topbar">
       <div className="title card-bit">
-        <h1>THE LAST CITY</h1>
+        <h1>{cityName || 'THE LAST CITY'}</h1>
         <div className="sub">{subtitle}</div>
       </div>
       <div className="res">
@@ -2130,6 +2130,7 @@ export function App() {
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
   const [liveUsername, setLiveUsername] = useState(''); // Reddit username (prefills the survivor name)
+  const [liveCityName, setLiveCityName] = useState<string | null>(null); // this city's ancient name (per-subreddit)
   // Advisor coachmarks: a 3-step guide after onboarding, replayable from the fab bar.
   const [coachStep, setCoachStep] = useState<number | null>(null);
   // Fallen-city terminal state (live only): city.status === 'fallen'.
@@ -2273,6 +2274,7 @@ export function App() {
       setLivePledge(init.pledge);
       setLiveEnergy({ effective: init.effectiveEnergy, used: init.player.energyUsedToday });
       setLiveUsername(init.player.username ?? '');
+      setLiveCityName(init.cityName || null);
       setLiveActions(init.yourActionsToday);
       setLiveStanding(init.standing);
       setLiveCycle(city.cycle);
@@ -3325,7 +3327,7 @@ export function App() {
         onBuilt={onBuilt}
         onVillager={onVillager}
       />
-      <TopBar vitals={vitals} population={population} subtitle={subtitle} />
+      <TopBar vitals={vitals} population={population} subtitle={subtitle} cityName={liveCityName} />
       <DayPill time={time} day={day} raidSoon={raidDays <= 1} raidActive={raidPhase === 'incoming'} />
       <NotifStack notifs={notifs} />
       <CityDashboard
@@ -3530,7 +3532,6 @@ export function App() {
       ) : (
         <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a district</div>
       )}
-      <div className="hud attrib">three.js example models · threejs.org</div>
       <Loader pct={pct} done={loaded} />
     </>
   );

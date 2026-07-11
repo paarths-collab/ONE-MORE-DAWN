@@ -255,7 +255,7 @@ async function withServer(name, port, env, run) {
 async function liveSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'live city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'live city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'loader exit');
     const boot = await cdp.eval(`(() => ({
       staleCommentClaim: document.body.innerText.includes('SAY HI IN THE COMMENTS'),
@@ -443,7 +443,7 @@ async function landscapeLayoutSmoke(url) {
       screenOrientation: { type: 'landscapePrimary', angle: 90 },
     });
     await cdp.call('Page.reload', { ignoreCache: true });
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'landscape city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'landscape city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'landscape loader exit');
     const layout = await cdp.eval(`(() => {
       const visible = (el) => {
@@ -559,7 +559,7 @@ async function fallenSmoke(url) {
 async function campSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'camp city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'camp city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'camp loader exit');
     await cdp.clickButton('CITY');
     await cdp.waitFor('!!document.querySelector(".build-panel")', 'camp build panel renders');
@@ -611,7 +611,7 @@ async function portraitSmoke(url) {
       screenOrientation: { type: 'portraitPrimary', angle: 0 },
     });
     await cdp.call('Page.reload', { ignoreCache: true });
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'portrait city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'portrait city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'portrait loader exit');
     const portrait = await cdp.eval(`(() => {
       const gate = document.querySelector('.rotate-gate');
@@ -639,7 +639,7 @@ async function portraitSmoke(url) {
 async function firstHouseSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'first-house city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'first-house city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'first-house loader exit');
     await cdp.clickSelectorContaining('.act', 'GUARD');
     await cdp.waitFor('document.body.innerText.includes("Your house now stands in the city. Build order #3.")', 'first contribution house feedback');

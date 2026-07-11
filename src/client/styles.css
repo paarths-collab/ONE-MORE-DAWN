@@ -396,8 +396,6 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
 .fl-stats span { display: block; } /* each stat on its own line — App renders three sibling spans */
 .fl-note { font-family: var(--pixel); font-size: 8px; letter-spacing: 1px; color: var(--gold); margin-top: 14px; opacity: 0.85; }
 
-/* ---- attribution: top-left under the title (the left flank is free since the SCENE sidebar was removed; bottom-left is taken by the building/villager chip) ---- */
-.attrib { top: 70px; left: 18px; font-size: 8px; color: var(--mut); opacity: 0.6; pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); max-width: 220px; }
 
 /* ---- notification stack (top-center, below day pill) ---- */
 .notifs { top: 96px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
@@ -524,7 +522,6 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
   .offline-sheet h2 { font-size: 12px; }
   .offline-sheet p { font-size: 11px; }
   .wm-info { font-size: 8px; }
-  .attrib { display: none; }
   .onboard-sheet, .fallen-sheet { width: calc(100vw - 16px); padding: 16px; }
   .ob-roles { grid-template-columns: 1fr; }
   .ob-title { font-size: 13px; }
@@ -598,7 +595,6 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
   .map-seg-btn { font-size: 8px; }
   .mini-cap { font-size: 8px; }
   .wm-info { font-size: 8px; }
-  .attrib { display: none; } /* no room on a landscape phone; the topbar + drawers own the chrome */
   .onboard-sheet, .fallen-sheet { max-height: 94vh; overflow-y: auto; }
   .ob-title { font-size: 14px; }
   .fl-title { font-size: 15px; }
