@@ -209,6 +209,7 @@ export interface HouseSummary {
 export type InitResponse = {
   type: 'init';
   postId: string;
+  cityName: string; // ancient name derived from worldSeed (cityNameFromSeed)
   city: CityState;
   player: PlayerProfile;
   effectiveEnergy: number; // dailyEnergy minus injury penalty; derived, never stored

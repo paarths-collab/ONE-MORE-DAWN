@@ -255,7 +255,7 @@ async function withServer(name, port, env, run) {
 async function liveSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'live city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'live city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'loader exit');
     const boot = await cdp.eval(`(() => ({
       staleCommentClaim: document.body.innerText.includes('SAY HI IN THE COMMENTS'),
@@ -314,6 +314,23 @@ async function liveSmoke(url) {
     assert(stored === '0' || stored === '1', 'mute state persists to localStorage');
     await cdp.eval(`document.querySelector('.mute-fab')?.click()`); // restore + audible feedback
     await cdp.waitFor(`window.__omdAudioPlays.some((src) => src.includes('button_click.wav'))`, 'unmute sound feedback');
+
+    // Advisor guided tour: appears once on a first visit, anchors a highlight
+    // ring to real UI, drives the dashboard tabs, and persists when finished.
+    await cdp.waitFor(`!!document.querySelector('.coach')`, 'advisor coach appears on first visit');
+    const coachHead = await cdp.eval(`document.querySelector('.coach .co-head span')?.textContent || ''`);
+    assert(coachHead.includes('ADVISOR'), 'coach chip is framed as the ADVISOR');
+    await cdp.waitFor(`!!document.querySelector('.coach-ring')`, 'advisor highlight ring anchors to the UI');
+    // Each step may take TWO taps: the first completes Maren's typewriter line,
+    // the second advances — so the guard allows 2× the step count plus slack.
+    let tourGuard = 0;
+    while (tourGuard++ < 24 && (await cdp.eval(`!!document.querySelector('.coach')`))) {
+      await cdp.eval(`document.querySelector('.coach .co-next')?.click()`);
+      await sleep(150);
+    }
+    assert(tourGuard >= 8, `advisor tour should cover the full surface (walked ${tourGuard - 1} taps).`);
+    await cdp.waitFor(`!document.querySelector('.coach') && !document.querySelector('.coach-ring')`, 'tour + ring dismiss after GOT IT');
+    assert((await cdp.eval(`window.localStorage.getItem('omd_coach_v1')`)) === '1', 'coach marks itself seen');
 
     // The Dawn Report teaser and full ledger are both visible commands, so
     // exercise their open and close controls before changing dashboard tabs.
@@ -435,7 +452,7 @@ async function landscapeLayoutSmoke(url) {
       screenOrientation: { type: 'landscapePrimary', angle: 90 },
     });
     await cdp.call('Page.reload', { ignoreCache: true });
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'landscape city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'landscape city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'landscape loader exit');
     const layout = await cdp.eval(`(() => {
       const visible = (el) => {
@@ -551,7 +568,7 @@ async function fallenSmoke(url) {
 async function campSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'camp city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'camp city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'camp loader exit');
     await cdp.clickButton('CITY');
     await cdp.waitFor('!!document.querySelector(".build-panel")', 'camp build panel renders');
@@ -603,7 +620,7 @@ async function portraitSmoke(url) {
       screenOrientation: { type: 'portraitPrimary', angle: 0 },
     });
     await cdp.call('Page.reload', { ignoreCache: true });
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'portrait city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'portrait city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'portrait loader exit');
     const portrait = await cdp.eval(`(() => {
       const gate = document.querySelector('.rotate-gate');
@@ -631,7 +648,7 @@ async function portraitSmoke(url) {
 async function firstHouseSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
-    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("THE LAST CITY")', 'first-house city boot');
+    await cdp.waitFor('!!document.querySelector("canvas") && document.body.innerText.includes("VAELMAR")', 'first-house city boot');
     await cdp.waitFor('!document.querySelector(".loader:not(.done)")', 'first-house loader exit');
     await cdp.clickSelectorContaining('.act', 'GUARD');
     await cdp.waitFor('document.body.innerText.includes("Your house now stands in the city. Build order #3.")', 'first contribution house feedback');

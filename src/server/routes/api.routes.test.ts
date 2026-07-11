@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { context, redis, reddit } from '@devvit/web/server';
 import { BALANCE } from '../../shared/balance';
+import { cityNameFromSeed } from '../../shared/cityName';
+import { hashString } from '../../shared/rng';
 import { HOUSE_CAP } from '../../shared/houses';
 import type { InitResponse, LeaderboardResponse, TimelineEntry, TimelineResponse } from '../../shared/types';
 import { api } from './api';
@@ -174,6 +176,9 @@ describe('GET /api/init houses', () => {
     const aliceRes = await api.request('/init');
     expect(aliceRes.status).toBe(200);
     const alice = (await aliceRes.json()) as InitResponse;
+    // every subreddit's city carries its own deterministic ancient name
+    expect(alice.cityName).toBe(cityNameFromSeed(hashString('t5_test')));
+    expect(alice.cityName.length).toBeGreaterThan(3);
     expect(alice.houses.total).toBe(2);
     expect(alice.houses.cap).toBe(HOUSE_CAP);
     expect(alice.houses.founder).toEqual({ username: 'alice' });

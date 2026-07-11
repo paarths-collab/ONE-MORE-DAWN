@@ -11,7 +11,8 @@ import {
 } from './scene';
 import { ApiFailure, getInit, getLeaderboard, getWorld, postAction, postAvatar, postPledge, postRole, postStrategy, postVote } from './api';
 import { isLocalHarnessHost, raidNoteFromEvents, worldUnavailableMessage } from './liveUi';
-import { isMuted, playSound, preloadSounds, toggleMuted } from './sound';
+import { cityEpithet } from '../shared/cityName';
+import { isMuted, playSound, preloadSounds, toggleMuted, unlockAudio } from './sound';
 import type {
   ActionType,
   BuildingDef,
@@ -197,6 +198,176 @@ const STRATEGY_IDS: StrategyPlanId[] = ['stockpile_food', 'repair_power', 'prepa
 const PLEDGE_KINDS: PledgeKind[] = ['stand_vigil', 'share_rations', 'run_messages', 'back_council'];
 const ACTION_IDS: ActionType[] = ['grow_food', 'repair_power', 'treat_sick', 'guard_wall'];
 const MARKED_ICONS: Record<Marked['kind'], string> = { person: '🧒', place: '🏚️', symbol: '🕯️' };
+
+// Advisor coachmarks — a 3-step guided tour shown once after onboarding (and
+// replayable from the 🧭 fab). Persisted so it never nags a returning player.
+const COACH_KEY = 'omd_coach_v1';
+const coachSeen = (): boolean => {
+  try {
+    return window.localStorage.getItem(COACH_KEY) === '1';
+  } catch {
+    return true; // storage unavailable — never nag
+  }
+};
+const markCoachSeen = (): void => {
+  try {
+    window.localStorage.setItem(COACH_KEY, '1');
+  } catch {
+    /* storage unavailable */
+  }
+};
+// The Advisor is a CHARACTER: Elder Maren, the city's keeper. Pixel-art SVG,
+// but ALIVE — she bobs, blinks, her mouth moves while her line types out, her
+// lantern flickers, and she turns/points toward whatever she is showing.
+function AdvisorPortrait({
+  talking,
+  face,
+  point,
+}: {
+  talking: boolean;
+  face: 'left' | 'right' | 'front';
+  point: 'up' | 'side' | null;
+}) {
+  const P = 3.5; // pixel size on a 14×14 grid
+  const px = (x: number, y: number, w: number, h: number, fill: string, key?: string) => (
+    <rect key={key ?? `${x}.${y}.${fill}`} x={x * P} y={y * P} width={w * P} height={h * P} fill={fill} />
+  );
+  return (
+    <span className={`co-avatar-wrap face-${face}${talking ? ' talking' : ''}${point ? ` point-${point}` : ''}`}>
+      <svg className="co-avatar" viewBox="0 0 49 49" width="48" height="48" aria-hidden="true">
+        {/* hood */}
+        {px(3, 0, 8, 2, '#4a3a14')}
+        {px(2, 1, 1, 9, '#4a3a14')}
+        {px(11, 1, 1, 9, '#4a3a14')}
+        {px(3, 2, 8, 2, '#2a2013')}
+        {px(3, 1, 8, 1, '#5c4a1a')}
+        {/* silver hair under the hood */}
+        {px(4, 3, 6, 1, '#b9b0a3')}
+        {px(4, 4, 1, 2, '#b9b0a3')}
+        {px(9, 4, 1, 2, '#b9b0a3')}
+        {/* face + shading */}
+        {px(5, 4, 4, 4, '#e2c49a')}
+        {px(4, 6, 1, 2, '#d3b285')}
+        {px(9, 6, 1, 2, '#d3b285')}
+        {/* brows */}
+        {px(5, 4, 1, 1, '#8c7a5c')}
+        {px(8, 4, 1, 1, '#8c7a5c')}
+        {/* eyes (blink via CSS) */}
+        <g className="co-eyes">
+          {px(5, 5, 1, 1, '#241c10', 'eyeL')}
+          {px(8, 5, 1, 1, '#241c10', 'eyeR')}
+        </g>
+        {/* nose + kind wrinkles */}
+        {px(6, 6, 2, 1, '#caa87f')}
+        {px(5, 7, 1, 1, '#caa87f')}
+        {/* mouth: closed line + open talk-frame toggled by CSS */}
+        <g className="co-mouth-closed">{px(6, 8, 2, 1, '#8a5a49', 'mC')}</g>
+        <g className="co-mouth-open">{px(6, 8, 2, 2, '#5c3a30', 'mO')}</g>
+        {/* chin + collar */}
+        {px(5, 9, 4, 1, '#caa87f')}
+        {px(3, 10, 8, 4, '#3a2d16')}
+        {px(6, 10, 2, 4, '#6e5b1e')}
+        {px(4, 10, 1, 1, '#5c4a1a')}
+        {px(9, 10, 1, 1, '#5c4a1a')}
+        {/* resting arm + lantern at her side */}
+        <g className="co-arm co-arm-side">
+          {px(11, 9, 2, 1, '#3a2d16', 'armS')}
+          {px(12, 10, 1, 1, '#d9b98c', 'handS')}
+          {px(12, 11, 2, 2, '#e8c34a', 'glowS')}
+          {px(12, 11, 1, 1, '#80651f', 'capS')}
+        </g>
+        {/* raised arm + lantern held high (pointing up at the topbar) */}
+        <g className="co-arm co-arm-up">
+          {px(11, 6, 1, 3, '#3a2d16', 'armU')}
+          {px(11, 5, 1, 1, '#d9b98c', 'handU')}
+          {px(11, 2, 2, 2, '#e8c34a', 'glowU')}
+          {px(11, 4, 1, 1, '#80651f', 'capU')}
+        </g>
+        {/* lantern light halo (flickers) */}
+        <g className="co-halo">{px(11, 1, 3, 3, 'rgba(232,195,74,0.28)', 'halo')}</g>
+      </svg>
+      <span className={`co-point${point ? ` co-point-${point}` : ''}`} aria-hidden="true">
+        {point ? '👉' : ''}
+      </span>
+    </span>
+  );
+}
+
+// {CITY} in text is replaced with the city's ancient name at render time.
+// `anchor` highlights that element with a ring; `go` drives the dashboard so
+// the advisor SHOWS each surface while explaining it.
+type CoachStep = {
+  icon: string;
+  title: string;
+  text: string;
+  anchor?: string;
+  go?: { open?: boolean; tab?: DashTab };
+};
+const COACH_STEPS: CoachStep[] = [
+  {
+    icon: '🕯️',
+    title: 'WELCOME, SURVIVOR',
+    text: "I am Maren. I kept {CITY} standing before you came, and I'll show you how we keep it standing now. All of this belongs to everyone in this subreddit, and it remembers.",
+    anchor: '.title',
+    go: { open: false },
+  },
+  {
+    icon: '📊',
+    title: 'THE VITALS',
+    text: 'Watch these as I do. Food, power, medicine, morale: the city consumes them every day. Threat climbs; defense holds it back. Let one reach zero and we lose people.',
+    anchor: '.res',
+    go: { open: false },
+  },
+  {
+    icon: '📅',
+    title: 'THE DAY',
+    text: 'One real day is one of ours. The raid clock counts down here. The night it reaches zero, the wall decides who wakes at dawn.',
+    anchor: '.day',
+    go: { open: false },
+  },
+  {
+    icon: '⚡',
+    title: 'YOUR ENERGY',
+    text: "Your strength for today. Spend it below: grow food, repair power, treat the sick, hold the wall. Whatever you choose, it lands at tomorrow's dawn.",
+    anchor: '.hotbar',
+    go: { open: false },
+  },
+  {
+    icon: '▦',
+    title: 'THE CITY PANEL',
+    text: 'My map table. Tap a district to fly to it, or look at WORLD and see the other cities out there, each one another subreddit holding its own line.',
+    anchor: '.dash',
+    go: { open: true, tab: 'map' },
+  },
+  {
+    icon: '🔨',
+    title: 'WE BUILD TOGETHER',
+    text: 'Nothing stands unless we raise it. ADD LABOR fills the shared bar; when it fills, the next building rises at dawn. Shelter first. Council Hall last.',
+    anchor: '.build-panel',
+    go: { open: true, tab: 'city' },
+  },
+  {
+    icon: '🗳️',
+    title: 'WE DECIDE TOGETHER',
+    text: "Here the city speaks: vote on today's crisis, back a council plan, and pledge for The Marked, one soul the night wants to take. One of each, every day.",
+    anchor: '.dash',
+    go: { open: true, tab: 'live' },
+  },
+  {
+    icon: '🏆',
+    title: 'THE RECORD',
+    text: 'Those who give the most are remembered here. 📋 DASH keeps the ledger, 📊 STATS the full numbers, 🔊 the sound. You now know every control I know.',
+    anchor: '.fab-bar',
+    go: { open: true, tab: 'top' },
+  },
+  {
+    icon: '🏠',
+    title: 'YOUR HOUSE',
+    text: 'One last thing. Your first contribution raises YOUR house. The founder built first; every soul after adds their own. Come back at dawn. {CITY} remembers its builders.',
+    anchor: '.title',
+    go: { open: false },
+  },
+];
 
 // First-run onboarding role catalog — icon/label/blurb, exact copy per spec.
 const ROLE_CATALOG: { id: Role; icon: string; label: string; blurb: string }[] = [
@@ -418,7 +589,7 @@ function VillageCanvas({
   return <div ref={mountRef} className="canvas-mount" />;
 }
 
-function TopBar({ vitals, population, subtitle }: { vitals: Vitals; population: number; subtitle: string }) {
+function TopBar({ vitals, population, subtitle, cityName }: { vitals: Vitals; population: number; subtitle: string; cityName: string | null }) {
   const RES: [string, number][] = [
     ['🍞', vitals.FOOD],
     ['⚡', vitals.POWER],
@@ -431,7 +602,7 @@ function TopBar({ vitals, population, subtitle }: { vitals: Vitals; population: 
   return (
     <div className="hud topbar">
       <div className="title card-bit">
-        <h1>THE LAST CITY</h1>
+        <h1>{cityName || 'THE LAST CITY'}</h1>
         <div className="sub">{subtitle}</div>
       </div>
       <div className="res">
@@ -1090,6 +1261,7 @@ function CityDashboard({
         ▦ CITY
       </button>
       <div className={open ? 'hud dash card-bit on' : 'hud dash card-bit'}>
+        <div className="dash-sticky">
         <div className="p-head">
           <span>CITY</span>
           <button type="button" className="p-x" onClick={() => setOpen(false)} aria-label="Close dashboard">
@@ -1110,6 +1282,7 @@ function CityDashboard({
           <button type="button" className={tab === 'top' ? 'dash-tab on' : 'dash-tab'} onClick={() => setTab('top')} aria-pressed={tab === 'top'}>
             TOP 🏆
           </button>
+        </div>
         </div>
 
         {tab === 'map' && (
@@ -1917,15 +2090,18 @@ function Loader({ pct, done }: { pct: number; done: boolean }) {
 // returning-but-roleless edge case) without setting a role server-side.
 function Onboarding({
   busy,
+  defaultName,
   onEnter,
   onDismiss,
 }: {
   busy: boolean;
+  /** Reddit username — prefilled so "skip it" visibly means "use my Reddit name". */
+  defaultName: string;
   onEnter: (role: Role, name: string) => void;
   onDismiss: () => void;
 }) {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(defaultName.slice(0, 24));
   const selectedLabel = ROLE_CATALOG.find((r) => r.id === selectedRole)?.label ?? '';
   return (
     <div className="hud onboard on">
@@ -1958,7 +2134,7 @@ function Onboarding({
         </div>
         <input
           className="ob-name"
-          placeholder="name your survivor (optional)"
+          placeholder="name your survivor, or we'll use your Reddit name"
           maxLength={24}
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -2097,6 +2273,14 @@ export function App() {
   const [needsOnboard, setNeedsOnboard] = useState(false);
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
+  const [liveUsername, setLiveUsername] = useState(''); // Reddit username (prefills the survivor name)
+  const [liveCityName, setLiveCityName] = useState<string | null>(null); // this city's ancient name (per-subreddit)
+  const [liveTraitId, setLiveTraitId] = useState<string | null>(null); // founding trait → the name's epithet
+  // Advisor coachmarks: a guided tour after onboarding, replayable from the fab bar.
+  const [coachStep, setCoachStep] = useState<number | null>(null);
+  const [coachRing, setCoachRing] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  // Where Maren looks/points, derived from the highlighted element's position.
+  const [coachAim, setCoachAim] = useState<{ face: 'left' | 'right' | 'front'; point: 'up' | 'side' | null }>({ face: 'front', point: null });
   // Fallen-city terminal state (live only): city.status === 'fallen'.
   const [cityFallen, setCityFallen] = useState(false);
   const [liveTimelineHeadline, setLiveTimelineHeadline] = useState<string | null>(null);
@@ -2237,6 +2421,9 @@ export function App() {
       setLiveMarked(init.marked);
       setLivePledge(init.pledge);
       setLiveEnergy({ effective: init.effectiveEnergy, used: init.player.energyUsedToday });
+      setLiveUsername(init.player.username ?? '');
+      setLiveCityName(init.cityName || null);
+      setLiveTraitId(init.trait?.id ?? null);
       setLiveActions(init.yourActionsToday);
       setLiveStanding(init.standing);
       setLiveCycle(city.cycle);
@@ -2255,6 +2442,9 @@ export function App() {
       if (first && init.player.role === null) {
         setNeedsOnboard(true);
         setOnboardOpen(true);
+      } else if (first && !coachSeen()) {
+        // returning player who never saw the advisor — walk them in once
+        setCoachStep(0);
       }
       raidDaysRef.current = init.raidInDays;
       setRaidDays(init.raidInDays);
@@ -2324,9 +2514,77 @@ export function App() {
     };
   }, [applyInit, pushNotif]);
 
+  // Maren speaks: her line types out character by character; tapping NEXT while
+  // she's mid-sentence completes the line first (classic dialogue-box feel).
+  const [coachTyped, setCoachTyped] = useState(0);
+  const coachFullText =
+    coachStep !== null && COACH_STEPS[coachStep]
+      ? COACH_STEPS[coachStep].text.replace(/\{CITY\}/g, liveCityName ?? 'the last city')
+      : '';
+  useEffect(() => {
+    if (coachStep === null) return undefined;
+    setCoachTyped(0);
+    const full = coachFullText.length;
+    const id = window.setInterval(() => {
+      setCoachTyped((n) => {
+        if (n + 2 >= full) {
+          window.clearInterval(id);
+          return full;
+        }
+        return n + 2;
+      });
+    }, 24);
+    return () => window.clearInterval(id);
+  }, [coachStep, liveCityName]);
+
+  // Advisor tour: each step can open the dashboard on a tab (so the player SEES
+  // what's being explained) and highlight its anchor element with a ring. The
+  // measure waits out the drawer's 250ms slide before reading the rect.
+  useEffect(() => {
+    if (coachStep === null) {
+      setCoachRing(null);
+      return undefined;
+    }
+    const step = COACH_STEPS[coachStep];
+    if (!step) return undefined;
+    if (step.go) {
+      if (step.go.open !== undefined) setDashOpen(step.go.open);
+      if (step.go.tab) setDashTab(step.go.tab);
+    }
+    const measure = () => {
+      const el = step.anchor ? document.querySelector(step.anchor) : null;
+      const r = el?.getBoundingClientRect();
+      if (!r || r.width <= 0 || r.height <= 0) {
+        setCoachRing(null);
+        setCoachAim({ face: 'front', point: null });
+        return;
+      }
+      setCoachRing({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 });
+      // Maren turns toward the target and raises her lantern when it's high up.
+      const cx = r.left + r.width / 2;
+      const face = cx < window.innerWidth / 2 - 60 ? 'left' : cx > window.innerWidth / 2 + 60 ? 'right' : 'front';
+      const point = r.bottom < window.innerHeight * 0.55 ? 'up' : face !== 'front' ? 'side' : null;
+      setCoachAim({ face, point });
+    };
+    // Measure NOW (throttled webviews clamp timers, and the ring must never
+    // lag a step behind), then re-measure once the drawer's slide settles.
+    measure();
+    const t = window.setTimeout(measure, 340);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', measure);
+    };
+  }, [coachStep]);
+
   // ---- V1 sound cues (local files, fail-silent; mute persists in localStorage) ----
   useEffect(() => {
     preloadSounds();
+    // Strict webviews (Reddit app) gate playback behind a user gesture — prime
+    // audio on pointerdown until one sticks (unlockAudio self-resets on failure).
+    const prime = () => unlockAudio();
+    window.addEventListener('pointerdown', prime, { passive: true });
+    return () => window.removeEventListener('pointerdown', prime);
   }, []);
   // Boolean state → the effect only re-fires on a real transition (no repeat on poll).
   useEffect(() => {
@@ -2519,6 +2777,7 @@ export function App() {
           pushNotif('🫡', `role set, ${roleLabel}`, 'good');
           setOnboardOpen(false);
           setNeedsOnboard(false);
+          if (!coachSeen()) setCoachStep(0); // the advisor picks up where onboarding ends
           // pull fresh player-derived state from the server
           const init = await getInit();
           applyInit(init, false);
@@ -2739,16 +2998,32 @@ export function App() {
     handleRef.current?.focusPoint?.(x, z);
   }, []);
 
-  // The day always turns, night → dawn → day → dusk, ~12s per phase. The
-  // visual cycle runs in BOTH modes (the server has no time-of-day), but only
-  // demo mode lets a dawn transition advance the day counter, in live mode
-  // the day is the server's.
+  // Time of day. LIVE: the sky follows the player's real local clock (each real
+  // day is one game day, so dawn/dusk land where they do outside the window).
+  // DEMO: the old fast ambient cycle (~12s per phase), where a dawn transition
+  // also advances the demo day counter.
   useEffect(() => {
-    const id = window.setInterval(() => {
-      const next = TIME_ORDER[(TIME_ORDER.indexOf(timeRef.current) + 1) % TIME_ORDER.length]!;
+    const liveTimeOfDay = (): TimeOfDay => {
+      const h = new Date().getHours();
+      if (h >= 5 && h < 9) return 'dawn';
+      if (h >= 9 && h < 17) return 'day';
+      if (h >= 17 && h < 20) return 'dusk';
+      return 'night';
+    };
+    const apply = (next: TimeOfDay) => {
+      if (next === timeRef.current) return;
       timeRef.current = next;
       setTimeState(next);
       handleRef.current?.setTimeOfDay(next);
+    };
+    if (modeRef.current === 'live') apply(liveTimeOfDay());
+    const id = window.setInterval(() => {
+      if (modeRef.current === 'live') {
+        apply(liveTimeOfDay());
+        return;
+      }
+      const next = TIME_ORDER[(TIME_ORDER.indexOf(timeRef.current) + 1) % TIME_ORDER.length]!;
+      apply(next);
       if (next === 'dawn' && modeRef.current === 'demo') {
         dayRef.current += 1;
         setDay(dayRef.current);
@@ -3189,7 +3464,7 @@ export function App() {
   // ---- derived render values (live vs demo) ----
   const isLive = mode === 'live';
   const subtitle = isLive
-    ? (liveStanding?.rankLabel ?? `cycle ${liveCycle} · the last city`)
+    ? `${cityEpithet(liveTraitId ?? 'standard')} · ${liveStanding?.rankLabel ?? `cycle ${liveCycle}`}`
     : mode === 'demo'
       ? '3D town · demo mode'
       : mode === 'offline'
@@ -3282,7 +3557,7 @@ export function App() {
         onBuilt={onBuilt}
         onVillager={onVillager}
       />
-      <TopBar vitals={vitals} population={population} subtitle={subtitle} />
+      <TopBar vitals={vitals} population={population} subtitle={subtitle} cityName={liveCityName} />
       <DayPill time={time} day={day} raidSoon={raidDays <= 1} raidActive={raidPhase === 'incoming'} />
       <NotifStack notifs={notifs} />
       <CityDashboard
@@ -3358,7 +3633,69 @@ export function App() {
         >
           {muted ? '🔇' : '🔊'}
         </button>
+        <button
+          type="button"
+          className="mute-fab card-bit"
+          onClick={() => setCoachStep(0)}
+          aria-label="Open the advisor guide"
+          title="Advisor guide"
+        >
+          🧭
+        </button>
       </div>
+      {coachStep !== null && !showOnboard && !showFallen && coachRing && (
+        <div className="coach-ring" style={{ left: coachRing.left, top: coachRing.top, width: coachRing.width, height: coachRing.height }} />
+      )}
+      {coachStep !== null && !showOnboard && !showFallen && COACH_STEPS[coachStep] && (
+        <div className="coach card-bit">
+          <AdvisorPortrait talking={coachTyped < coachFullText.length} face={coachAim.face} point={coachAim.point} />
+          <div className="co-head">
+            <span>
+              {COACH_STEPS[coachStep].icon} MAREN · CITY ADVISOR · {COACH_STEPS[coachStep].title}
+            </span>
+            <button
+              type="button"
+              className="p-x"
+              onClick={() => {
+                markCoachSeen();
+                setCoachStep(null);
+              }}
+              aria-label="Dismiss advisor"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="co-body">
+            {coachFullText.slice(0, coachTyped)}
+            {coachTyped < coachFullText.length && <i className="co-caret">▌</i>}
+          </div>
+          <div className="co-foot">
+            <span className="co-step">
+              {coachStep + 1}/{COACH_STEPS.length}
+            </span>
+            <button
+              type="button"
+              className="co-next"
+              onClick={() => {
+                playSound('button_click');
+                // mid-sentence tap completes her line; the next tap advances
+                if (coachTyped < coachFullText.length) {
+                  setCoachTyped(coachFullText.length);
+                  return;
+                }
+                if (coachStep + 1 < COACH_STEPS.length) {
+                  setCoachStep(coachStep + 1);
+                } else {
+                  markCoachSeen();
+                  setCoachStep(null);
+                }
+              }}
+            >
+              {coachTyped < coachFullText.length ? '»' : coachStep + 1 < COACH_STEPS.length ? 'NEXT →' : 'GOT IT'}
+            </button>
+          </div>
+        </div>
+      )}
       <StatsModal
         open={statsOpen}
         onClose={() => setStatsOpen(false)}
@@ -3421,7 +3758,7 @@ export function App() {
           }}
         />
       )}
-      {showOnboard && <Onboarding busy={onboardBusy} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
+      {showOnboard && <Onboarding busy={onboardBusy} defaultName={liveUsername} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
       {showFallen && (
         <FallenScreen
           epitaph={fallenEpitaph}
@@ -3437,7 +3774,6 @@ export function App() {
       ) : (
         <div className="hud hint card-bit">drag to pan · scroll / pinch to zoom · click a district</div>
       )}
-      <div className="hud attrib">three.js example models · threejs.org</div>
       <Loader pct={pct} done={loaded} />
     </>
   );

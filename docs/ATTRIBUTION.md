@@ -48,4 +48,5 @@ _Last updated: 2026-07-09 · current sfx = generated placeholders (CC0-equivalen
 ## 3D models (villagers & wildlife)
 
 three.js example models (Soldier, Horse, Flamingo, Parrot, Stork) from
-[threejs.org/examples](https://threejs.org/examples) — see in-app credit line.
+[threejs.org/examples](https://threejs.org/examples) (MIT) — credited here;
+the in-app credit line was removed for V1 to keep the HUD clean.

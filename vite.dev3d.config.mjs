@@ -86,7 +86,7 @@ const PLEDGE = {
   usedToday: false, ledger: { topHelpers: ['u/ashen_fox', 'u/saltcedar'], recent: ['u/palewick pledged'], mine: 0 },
 };
 const INIT = {
-  type: 'init', postId: 't3_mock', city: CITY, player: PLAYER, effectiveEnergy: 3, crisis: CRISIS,
+  type: 'init', postId: 't3_mock', cityName: 'VAELMAR', city: CITY, player: PLAYER, effectiveEnergy: 3, crisis: CRISIS,
   crisisVotes: { a: 12, b: 7, c: 5 }, yourCrisisVote: null,
   strategyVotes: { prepare_raid: 9, stockpile_food: 6, repair_power: 4 }, yourStrategyVote: null,
   yourActionsToday: { grow_food: 1 }, missionUsedToday: false, resolving: false,

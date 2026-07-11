@@ -32,6 +32,7 @@ import type {
   WorldResponse,
 } from '../../shared/types';
 import { hashString } from '../../shared/rng';
+import { cityNameFromSeed } from '../../shared/cityName';
 import { clampAvatar, isValidAvatar } from '../../shared/avatar';
 import { validateAction, validateRoleChange } from '../game/actionRules';
 import { buildStatus } from '../game/building';
@@ -439,6 +440,7 @@ api.get('/init', async (c) => {
   return c.json<InitResponse>({
     type: 'init',
     postId,
+    cityName: cityNameFromSeed(city.worldSeed),
     city,
     player,
     effectiveEnergy: effectiveEnergy(player, city.day),

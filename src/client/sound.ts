@@ -64,6 +64,32 @@ export function preloadSounds(): void {
   }
 }
 
+/**
+ * Prime audio inside strict webviews (Reddit app / embedded browsers): some
+ * only allow playback that traces to a user gesture, so the FIRST pointerdown
+ * plays a zero-volume cue to earn the permission. Safe to call repeatedly;
+ * fail-silent like everything else here.
+ */
+let unlocked = false;
+export function unlockAudio(): void {
+  if (unlocked || !hasAudio) return;
+  unlocked = true;
+  try {
+    const t = template('button_click');
+    if (!t) return;
+    const node = t.cloneNode(true) as HTMLAudioElement;
+    node.volume = 0;
+    void node
+      .play()
+      .then(() => node.pause())
+      .catch(() => {
+        unlocked = false; // gesture didn't count — try again on the next one
+      });
+  } catch {
+    unlocked = false;
+  }
+}
+
 /** Play a cue. No-op when muted, unsupported, blocked, or missing — never throws. */
 export function playSound(name: SfxName): void {
   if (muted || !hasAudio) return;
