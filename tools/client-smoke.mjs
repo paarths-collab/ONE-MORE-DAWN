@@ -321,12 +321,14 @@ async function liveSmoke(url) {
     const coachHead = await cdp.eval(`document.querySelector('.coach .co-head span')?.textContent || ''`);
     assert(coachHead.includes('ADVISOR'), 'coach chip is framed as the ADVISOR');
     await cdp.waitFor(`!!document.querySelector('.coach-ring')`, 'advisor highlight ring anchors to the UI');
+    // Each step may take TWO taps: the first completes Maren's typewriter line,
+    // the second advances — so the guard allows 2× the step count plus slack.
     let tourGuard = 0;
-    while (tourGuard++ < 12 && (await cdp.eval(`!!document.querySelector('.coach')`))) {
+    while (tourGuard++ < 24 && (await cdp.eval(`!!document.querySelector('.coach')`))) {
       await cdp.eval(`document.querySelector('.coach .co-next')?.click()`);
       await sleep(150);
     }
-    assert(tourGuard >= 8, `advisor tour should cover the full surface (walked ${tourGuard - 1} steps).`);
+    assert(tourGuard >= 8, `advisor tour should cover the full surface (walked ${tourGuard - 1} taps).`);
     await cdp.waitFor(`!document.querySelector('.coach') && !document.querySelector('.coach-ring')`, 'tour + ring dismiss after GOT IT');
     assert((await cdp.eval(`window.localStorage.getItem('omd_coach_v1')`)) === '1', 'coach marks itself seen');
 

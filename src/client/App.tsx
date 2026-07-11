@@ -216,6 +216,33 @@ const markCoachSeen = (): void => {
     /* storage unavailable */
   }
 };
+// The Advisor is a CHARACTER: Elder Maren, the city's keeper, drawn as a
+// pixel portrait beside her dialogue. She speaks in first person, types her
+// lines out, and walks the player across every surface.
+function AdvisorPortrait() {
+  // 11×11 pixel grid — hooded elder with a lantern, in the HUD palette.
+  const P = 4; // pixel size
+  const px = (x: number, y: number, w: number, h: number, fill: string) => (
+    <rect key={`${x}-${y}-${fill}`} x={x * P} y={y * P} width={w * P} height={h * P} fill={fill} />
+  );
+  return (
+    <svg className="co-avatar" viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
+      {px(1, 1, 9, 3, '#4a3a14')/* hood crown */}
+      {px(0, 3, 2, 6, '#4a3a14')/* hood left */}
+      {px(9, 3, 2, 6, '#4a3a14')/* hood right */}
+      {px(2, 3, 7, 4, '#2a2013')/* hood shadow */}
+      {px(3, 4, 5, 3, '#d9b98c')/* face */}
+      {px(3, 5, 1, 1, '#171109')/* eye L */}
+      {px(6, 5, 1, 1, '#171109')/* eye R */}
+      {px(3, 7, 5, 1, '#b7936a')/* chin */}
+      {px(2, 8, 7, 3, '#3a2d16')/* robe */}
+      {px(4, 8, 3, 3, '#6e5b1e')/* robe trim */}
+      {px(9, 7, 2, 2, '#e8c34a')/* lantern glow */}
+      {px(9, 6, 1, 1, '#80651f')/* lantern cap */}
+    </svg>
+  );
+}
+
 // {CITY} in text is replaced with the city's ancient name at render time.
 // `anchor` highlights that element with a ring; `go` drives the dashboard so
 // the advisor SHOWS each surface while explaining it.
@@ -228,65 +255,65 @@ type CoachStep = {
 };
 const COACH_STEPS: CoachStep[] = [
   {
-    icon: '🧭',
+    icon: '🕯️',
     title: 'WELCOME, SURVIVOR',
-    text: "I'm your Advisor. This is {CITY} — this subreddit's own city. Everything you see is shared with everyone here, and it all persists day after day.",
+    text: "I am Maren. I kept {CITY} standing before you came, and I'll show you how we keep it standing now. All of this belongs to everyone in this subreddit — and it remembers.",
     anchor: '.title',
     go: { open: false },
   },
   {
     icon: '📊',
-    title: 'CITY VITALS',
-    text: 'Food, power, medicine, morale — the city eats and decays every day. Threat rises, defense holds it back. When these hit zero, people are lost.',
+    title: 'THE VITALS',
+    text: 'Watch these as I do. Food, power, medicine, morale — the city consumes them every day. Threat climbs; defense holds it back. Let one reach zero and we lose people.',
     anchor: '.res',
     go: { open: false },
   },
   {
     icon: '📅',
     title: 'THE DAY',
-    text: 'Each real day is one game day. The raid countdown lives here — when it hits zero, the wall decides at dawn.',
+    text: 'One real day is one of ours. The raid clock counts down here — the night it reaches zero, the wall decides who wakes at dawn.',
     anchor: '.day',
     go: { open: false },
   },
   {
     icon: '⚡',
     title: 'YOUR ENERGY',
-    text: 'Your daily energy. Spend it below — grow food, repair power, treat the sick, guard the wall. Every action counts toward tomorrow.',
+    text: "Your strength for today. Spend it below — grow food, repair power, treat the sick, hold the wall. Whatever you choose, it lands at tomorrow's dawn.",
     anchor: '.hotbar',
     go: { open: false },
   },
   {
     icon: '▦',
     title: 'THE CITY PANEL',
-    text: 'Your command post. The map shows the town — tap a district to fly there, or switch to WORLD to see rival cities surviving alongside yours.',
+    text: 'My map table. Tap a district to fly to it — or look at WORLD and see the other cities out there, each one another subreddit holding its own line.',
     anchor: '.dash',
     go: { open: true, tab: 'map' },
   },
   {
     icon: '🔨',
-    title: 'BUILD TOGETHER',
-    text: "Nothing stands unless the community raises it. ADD LABOR fills the shared bar — at dawn the next building appears, from first Shelter to Council Hall.",
+    title: 'WE BUILD TOGETHER',
+    text: 'Nothing stands unless we raise it. ADD LABOR fills the shared bar — when it fills, the next building rises at dawn. Shelter first. Council Hall last.',
     anchor: '.build-panel',
     go: { open: true, tab: 'city' },
   },
   {
     icon: '🗳️',
-    title: 'DECIDE TOGETHER',
-    text: "Vote on today's crisis, back a council plan, and pledge to save The Marked — one of each per day. The subreddit decides as one.",
+    title: 'WE DECIDE TOGETHER',
+    text: "Here the city speaks: vote on today's crisis, back a council plan, and pledge for The Marked — one soul the night wants to take. One of each, every day.",
     anchor: '.dash',
     go: { open: true, tab: 'live' },
   },
   {
     icon: '🏆',
     title: 'THE RECORD',
-    text: 'Top contributors are remembered here. 📋 DASH holds the city ledger, 📊 STATS the full numbers, 🔊 the sound. You now know every control.',
+    text: 'Those who give the most are remembered here. 📋 DASH keeps the ledger, 📊 STATS the full numbers, 🔊 the sound. You now know every control I know.',
     anchor: '.fab-bar',
     go: { open: true, tab: 'top' },
   },
   {
     icon: '🏠',
     title: 'YOUR HOUSE',
-    text: 'Your first contribution raises YOUR house in the town — the founder built first, and every contributor after adds one. Come back at dawn. {CITY} remembers.',
+    text: 'One last thing. Your first contribution raises YOUR house — the founder built first; every soul after adds their own. Come back at dawn. {CITY} remembers its builders.',
     anchor: '.title',
     go: { open: false },
   },
@@ -2427,6 +2454,29 @@ export function App() {
     };
   }, [applyInit, pushNotif]);
 
+  // Maren speaks: her line types out character by character; tapping NEXT while
+  // she's mid-sentence completes the line first (classic dialogue-box feel).
+  const [coachTyped, setCoachTyped] = useState(0);
+  const coachFullText =
+    coachStep !== null && COACH_STEPS[coachStep]
+      ? COACH_STEPS[coachStep].text.replace(/\{CITY\}/g, liveCityName ?? 'the last city')
+      : '';
+  useEffect(() => {
+    if (coachStep === null) return undefined;
+    setCoachTyped(0);
+    const full = coachFullText.length;
+    const id = window.setInterval(() => {
+      setCoachTyped((n) => {
+        if (n + 2 >= full) {
+          window.clearInterval(id);
+          return full;
+        }
+        return n + 2;
+      });
+    }, 24);
+    return () => window.clearInterval(id);
+  }, [coachStep, liveCityName]);
+
   // Advisor tour: each step can open the dashboard on a tab (so the player SEES
   // what's being explained) and highlight its anchor element with a ring. The
   // measure waits out the drawer's 250ms slide before reading the rect.
@@ -3514,9 +3564,10 @@ export function App() {
       )}
       {coachStep !== null && !showOnboard && !showFallen && COACH_STEPS[coachStep] && (
         <div className="coach card-bit">
+          <AdvisorPortrait />
           <div className="co-head">
             <span>
-              {COACH_STEPS[coachStep].icon} ADVISOR — {COACH_STEPS[coachStep].title}
+              {COACH_STEPS[coachStep].icon} MAREN · CITY ADVISOR — {COACH_STEPS[coachStep].title}
             </span>
             <button
               type="button"
@@ -3530,7 +3581,10 @@ export function App() {
               ✕
             </button>
           </div>
-          <div className="co-body">{COACH_STEPS[coachStep].text.replace(/\{CITY\}/g, liveCityName ?? 'the last city')}</div>
+          <div className="co-body">
+            {coachFullText.slice(0, coachTyped)}
+            {coachTyped < coachFullText.length && <i className="co-caret">▌</i>}
+          </div>
           <div className="co-foot">
             <span className="co-step">
               {coachStep + 1}/{COACH_STEPS.length}
@@ -3540,6 +3594,11 @@ export function App() {
               className="co-next"
               onClick={() => {
                 playSound('button_click');
+                // mid-sentence tap completes her line; the next tap advances
+                if (coachTyped < coachFullText.length) {
+                  setCoachTyped(coachFullText.length);
+                  return;
+                }
                 if (coachStep + 1 < COACH_STEPS.length) {
                   setCoachStep(coachStep + 1);
                 } else {
@@ -3548,7 +3607,7 @@ export function App() {
                 }
               }}
             >
-              {coachStep + 1 < COACH_STEPS.length ? 'NEXT →' : 'GOT IT'}
+              {coachTyped < coachFullText.length ? '»' : coachStep + 1 < COACH_STEPS.length ? 'NEXT →' : 'GOT IT'}
             </button>
           </div>
         </div>
