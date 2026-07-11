@@ -216,23 +216,81 @@ const markCoachSeen = (): void => {
     /* storage unavailable */
   }
 };
-const COACH_STEPS = [
+// {CITY} in text is replaced with the city's ancient name at render time.
+// `anchor` highlights that element with a ring; `go` drives the dashboard so
+// the advisor SHOWS each surface while explaining it.
+type CoachStep = {
+  icon: string;
+  title: string;
+  text: string;
+  anchor?: string;
+  go?: { open?: boolean; tab?: DashTab };
+};
+const COACH_STEPS: CoachStep[] = [
+  {
+    icon: '🧭',
+    title: 'WELCOME, SURVIVOR',
+    text: "I'm your Advisor. This is {CITY} — this subreddit's own city. Everything you see is shared with everyone here, and it all persists day after day.",
+    anchor: '.title',
+    go: { open: false },
+  },
+  {
+    icon: '📊',
+    title: 'CITY VITALS',
+    text: 'Food, power, medicine, morale — the city eats and decays every day. Threat rises, defense holds it back. When these hit zero, people are lost.',
+    anchor: '.res',
+    go: { open: false },
+  },
+  {
+    icon: '📅',
+    title: 'THE DAY',
+    text: 'Each real day is one game day. The raid countdown lives here — when it hits zero, the wall decides at dawn.',
+    anchor: '.day',
+    go: { open: false },
+  },
   {
     icon: '⚡',
-    title: 'YOUR DAY',
-    text: 'You get energy every real day. Spend it on the bar below — grow food, repair, treat, guard — or open ▦ CITY and ADD LABOR to raise the next building.',
+    title: 'YOUR ENERGY',
+    text: 'Your daily energy. Spend it below — grow food, repair power, treat the sick, guard the wall. Every action counts toward tomorrow.',
+    anchor: '.hotbar',
+    go: { open: false },
+  },
+  {
+    icon: '▦',
+    title: 'THE CITY PANEL',
+    text: 'Your command post. The map shows the town — tap a district to fly there, or switch to WORLD to see rival cities surviving alongside yours.',
+    anchor: '.dash',
+    go: { open: true, tab: 'map' },
+  },
+  {
+    icon: '🔨',
+    title: 'BUILD TOGETHER',
+    text: "Nothing stands unless the community raises it. ADD LABOR fills the shared bar — at dawn the next building appears, from first Shelter to Council Hall.",
+    anchor: '.build-panel',
+    go: { open: true, tab: 'city' },
   },
   {
     icon: '🗳️',
     title: 'DECIDE TOGETHER',
-    text: "Open ▦ CITY → LIVE to vote on today's crisis, back a council plan, and pledge to save The Marked. The whole subreddit decides as one.",
+    text: "Vote on today's crisis, back a council plan, and pledge to save The Marked — one of each per day. The subreddit decides as one.",
+    anchor: '.dash',
+    go: { open: true, tab: 'live' },
+  },
+  {
+    icon: '🏆',
+    title: 'THE RECORD',
+    text: 'Top contributors are remembered here. 📋 DASH holds the city ledger, 📊 STATS the full numbers, 🔊 the sound. You now know every control.',
+    anchor: '.fab-bar',
+    go: { open: true, tab: 'top' },
   },
   {
     icon: '🏠',
-    title: 'THE CITY REMEMBERS',
-    text: 'Your first contribution raises your own house in the town. Everything resolves at dawn — come back tomorrow to see what the city became.',
+    title: 'YOUR HOUSE',
+    text: 'Your first contribution raises YOUR house in the town — the founder built first, and every contributor after adds one. Come back at dawn. {CITY} remembers.',
+    anchor: '.title',
+    go: { open: false },
   },
-] as const;
+];
 
 // First-run onboarding role catalog — icon/label/blurb, exact copy per spec.
 const ROLE_CATALOG: { id: Role; icon: string; label: string; blurb: string }[] = [
@@ -2133,8 +2191,9 @@ export function App() {
   const [liveUsername, setLiveUsername] = useState(''); // Reddit username (prefills the survivor name)
   const [liveCityName, setLiveCityName] = useState<string | null>(null); // this city's ancient name (per-subreddit)
   const [liveTraitId, setLiveTraitId] = useState<string | null>(null); // founding trait → the name's epithet
-  // Advisor coachmarks: a 3-step guide after onboarding, replayable from the fab bar.
+  // Advisor coachmarks: a guided tour after onboarding, replayable from the fab bar.
   const [coachStep, setCoachStep] = useState<number | null>(null);
+  const [coachRing, setCoachRing] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   // Fallen-city terminal state (live only): city.status === 'fallen'.
   const [cityFallen, setCityFallen] = useState(false);
   const [liveTimelineHeadline, setLiveTimelineHeadline] = useState<string | null>(null);
@@ -2367,6 +2426,40 @@ export function App() {
       cancelled = true;
     };
   }, [applyInit, pushNotif]);
+
+  // Advisor tour: each step can open the dashboard on a tab (so the player SEES
+  // what's being explained) and highlight its anchor element with a ring. The
+  // measure waits out the drawer's 250ms slide before reading the rect.
+  useEffect(() => {
+    if (coachStep === null) {
+      setCoachRing(null);
+      return undefined;
+    }
+    const step = COACH_STEPS[coachStep];
+    if (!step) return undefined;
+    if (step.go) {
+      if (step.go.open !== undefined) setDashOpen(step.go.open);
+      if (step.go.tab) setDashTab(step.go.tab);
+    }
+    const measure = () => {
+      const el = step.anchor ? document.querySelector(step.anchor) : null;
+      const r = el?.getBoundingClientRect();
+      if (!r || r.width <= 0 || r.height <= 0) {
+        setCoachRing(null);
+        return;
+      }
+      setCoachRing({ left: r.left - 6, top: r.top - 6, width: r.width + 12, height: r.height + 12 });
+    };
+    // Measure NOW (throttled webviews clamp timers, and the ring must never
+    // lag a step behind), then re-measure once the drawer's slide settles.
+    measure();
+    const t = window.setTimeout(measure, 340);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', measure);
+    };
+  }, [coachStep]);
 
   // ---- V1 sound cues (local files, fail-silent; mute persists in localStorage) ----
   useEffect(() => {
@@ -3416,6 +3509,9 @@ export function App() {
           🧭
         </button>
       </div>
+      {coachStep !== null && !showOnboard && !showFallen && coachRing && (
+        <div className="coach-ring" style={{ left: coachRing.left, top: coachRing.top, width: coachRing.width, height: coachRing.height }} />
+      )}
       {coachStep !== null && !showOnboard && !showFallen && COACH_STEPS[coachStep] && (
         <div className="coach card-bit">
           <div className="co-head">
@@ -3434,7 +3530,7 @@ export function App() {
               ✕
             </button>
           </div>
-          <div className="co-body">{COACH_STEPS[coachStep].text}</div>
+          <div className="co-body">{COACH_STEPS[coachStep].text.replace(/\{CITY\}/g, liveCityName ?? 'the last city')}</div>
           <div className="co-foot">
             <span className="co-step">
               {coachStep + 1}/{COACH_STEPS.length}
