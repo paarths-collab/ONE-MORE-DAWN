@@ -881,7 +881,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     g.add(cyl(0.06, 0.9, MAT.timberDark, 0.6, 0.45, 1.8, 6));
     g.add(box(1.6, 0.1, 0.9, MAT.roofSlate, 0, 0.95, 1.55));
     g.add(glowCube(0.4, -0.8, 1.0, 1.12));
-    register(g, x, z, { name: 'DIPLOMACY', level: 2, blurb: 'Envoys from other subreddit-cities are received here.' }, 2.8, { icon: '🕊️', y: 3.4 });
+    register(g, x, z, { name: 'DIPLOMACY', level: 2, blurb: 'Envoys from other subreddit cities are received here.' }, 2.8, { icon: '🕊️', y: 3.4 });
   }
   // NEWS — notice board, inner west
   {
@@ -924,7 +924,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     g.add(box(1.9, 1.0, 1.9, MAT.plaster, 0, 5.0, 0));
     g.add(pyramid(2.3, 1.1, 2.3, MAT.roofSlateDark, 0, 6.05, 0));
     g.add(glowCube(0.4, 0, 5.1, 0.98));
-    register(g, x, z, { name: 'STATISTICS', level: 2, blurb: 'Dawns survived, pledges counted — the chronicle keeps score.' }, 2.4, { icon: '📊', y: 7.0 });
+    register(g, x, z, { name: 'STATISTICS', level: 2, blurb: 'Dawns survived, pledges counted, the chronicle keeps score.' }, 2.4, { icon: '📊', y: 7.0 });
   }
 
   // ---------- filler houses along the roads (~240) ----------
