@@ -2,23 +2,25 @@
 
 ## Sound effects (V1)
 
-The V1 sound cues shipped in `public/assets/sfx/` are **procedurally-generated
-placeholder tones**, synthesized locally by `tools/gen-sfx.mjs` (short sine/tri
-envelopes). They contain **no third-party content** and are therefore
-**public-domain / CC0-equivalent** — no attribution required, safe to ship.
+The V1 sound cues shipped in `public/assets/sfx/` are built from **Kenney's
+CC0 audio packs** (downloaded 2026-07-11 from kenney.nl — CC0 / public domain,
+no attribution required, credited as a courtesy). The three "big moment" cues
+(raid, dawn, fallen) are ffmpeg-composed derivatives of the same CC0 material
+(pitch shifts + echo), which remain CC0.
 
-| File | Event | Source | License |
-|---|---|---|---|
-| `button_click.wav` | UI / mute toggle | Generated (`tools/gen-sfx.mjs`) | CC0 / public domain |
-| `action_confirm.wav` | daily action success | Generated | CC0 / public domain |
-| `vote_cast.wav` | crisis / council vote | Generated | CC0 / public domain |
-| `pledge.wav` | Marked pledge | Generated | CC0 / public domain |
-| `raid_warning.wav` | raid forecast active | Generated | CC0 / public domain |
-| `dawn_report.wav` | Dawn Report appears | Generated | CC0 / public domain |
-| `city_fallen.wav` | fallen-city screen | Generated | CC0 / public domain |
-| `error_soft.wav` | failed / blocked action | Generated | CC0 / public domain |
+| File | Event | Built from | Pack | License |
+|---|---|---|---|---|
+| `button_click.wav` | UI / mute toggle | `click_002` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | CC0 |
+| `action_confirm.wav` | daily action success | `confirmation_002` | Interface Sounds | CC0 |
+| `vote_cast.wav` | crisis / council vote | `select_003` | Interface Sounds | CC0 |
+| `pledge.wav` | Marked pledge | `glass_001` + echo | Interface Sounds | CC0 |
+| `raid_warning.wav` | raid forecast active | `bong_001` −1 octave, double toll | Interface Sounds | CC0 |
+| `dawn_report.wav` | Dawn Report appears | `jingles_PIZZI07` + reverb | [Music Jingles](https://kenney.nl/assets/music-jingles) | CC0 |
+| `city_fallen.wav` | fallen-city screen | `bong_001` −2 octaves, death-knell decay | Interface Sounds | CC0 |
+| `error_soft.wav` | failed / blocked action | `error_006` | Interface Sounds | CC0 |
 
-Regenerate with: `node tools/gen-sfx.mjs`.
+The earlier procedural placeholders can still be regenerated with
+`node tools/gen-sfx.mjs` if these files are ever removed.
 
 ### Swapping in real CC0 audio (recommended for polish)
 
@@ -43,7 +45,7 @@ To replace the placeholders with higher-quality free sounds, drop files with the
 only** (avoid CC-BY-NC / Sampling+ / unclear); [OpenGameArt](https://opengameart.org)
 — check every file's license individually.
 
-_Last updated: 2026-07-09 · current sfx = generated placeholders (CC0-equivalent)._
+_Last updated: 2026-07-11 · current sfx = Kenney CC0 (Interface Sounds + Music Jingles)._
 
 ## Background music (V1)
 
