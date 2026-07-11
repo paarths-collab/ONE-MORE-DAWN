@@ -2374,6 +2374,14 @@ export function App() {
       });
   }, []);
 
+  // Fetch the world once as soon as we're live, so the horizon settlements in
+  // the 3D scene wear real city names without waiting for the WORLD tab.
+  useEffect(() => {
+    if (mode !== 'live' || worldFetchedRef.current) return;
+    worldFetchedRef.current = true;
+    refreshWorld();
+  }, [mode, refreshWorld]);
+
   // First open of the WORLD map / TOP tab in live mode triggers the fetch;
   // afterwards the 30s poll refreshes whichever is on screen.
   useEffect(() => {
@@ -2680,6 +2688,16 @@ export function App() {
   useEffect(() => {
     handleRef.current?.setHouses?.(houses);
   }, [houses, loaded]);
+
+  // Horizon: relabel the 3D scene's distant neighbor settlements with real
+  // world-map cities (rank order, minus your own). No data (demo mode, gate,
+  // registry down) keeps the scene's fictional defaults.
+  useEffect(() => {
+    if (!worldCities) return;
+    handleRef.current?.setDistantCities?.(
+      worldCities.filter((c) => !c.isYou).slice(0, 5).map((c) => ({ name: c.subreddit, status: c.status })),
+    );
+  }, [worldCities, loaded]);
 
   // Declutter: the floating in-world district/house banner labels are redundant
   // (and overlap in a narrow webview) while the CITY dashboard panel is open, so
