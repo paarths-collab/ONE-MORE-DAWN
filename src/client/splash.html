@@ -8,14 +8,49 @@
       content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0"
     />
     <title>One More Dawn</title>
+    <!-- Critical styles inlined: the splash renders inside Reddit's feed as the
+         post's inline entrypoint, where the external stylesheet can be delayed
+         or dropped. This block alone must make the card look designed. -->
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { min-height: 100%; }
+      body.app {
+        position: relative;
+        min-height: 100vh;
+        overflow: hidden;
+        background: radial-gradient(120% 90% at 78% 88%, #2c2313 0%, #1a1410 42%, #100d0b 100%);
+        color: #f2eee5;
+        font-family: 'JetBrains Mono', Consolas, monospace;
+        border-top: 2px solid #6e5b1e;
+        border-bottom: 2px solid #2c3d20;
+      }
+      .splash-shell { position: relative; display: flex; align-items: center; min-height: calc(100vh - 34px); width: min(100%, 980px); margin: 0 auto; padding: clamp(22px, 5vw, 54px); }
+      .content { position: relative; z-index: 2; width: min(62%, 560px); padding-bottom: 18px; }
+      .eyebrow { margin-bottom: 10px; color: #89a868; font: 400 clamp(8px, 1.4vw, 11px)/1.4 'Silkscreen', monospace; letter-spacing: 1px; }
+      .title { color: #e8c34a; font: 700 clamp(25px, 5.5vw, 52px)/1.05 'Silkscreen', monospace; text-shadow: 0 3px 0 #493913; }
+      .offer { margin-top: 12px; color: #f2eee5; font: 700 clamp(15px, 2vw, 21px)/1.3 'JetBrains Mono', Consolas, monospace; }
+      .description { max-width: 560px; margin-top: 8px; color: #aaa093; font: 400 clamp(10px, 1.5vw, 13px)/1.55 'JetBrains Mono', Consolas, monospace; }
+      .signals { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 18px; color: #aaa093; font: 400 9px/1.4 'Silkscreen', monospace; }
+      .signals b { color: #e8c34a; font-size: 11px; }
+      .start-button { display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-height: 48px; margin-top: 20px; padding: 12px 18px; border: 1px solid #80651f; border-radius: 6px; background: #e8c34a; box-shadow: 0 4px 0 #6b5218; color: #171109; cursor: pointer; font: 700 11px/1 'Silkscreen', monospace; }
+      .start-button:hover { background: #f3d467; }
+      .snoo { position: absolute; right: clamp(8px, 2.5vw, 28px); bottom: -8%; z-index: 1; width: min(43vw, 390px); max-height: 96%; object-fit: contain; object-position: right bottom; filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.5)); }
+      .footer { position: absolute; right: clamp(14px, 3vw, 32px); bottom: 10px; z-index: 3; color: #756d62; font: 400 7px/1 'Silkscreen', monospace; letter-spacing: 1px; }
+      @media (max-width: 600px) {
+        .splash-shell { align-items: flex-start; padding: 24px 20px 70px; }
+        .content { width: 100%; }
+        .snoo { right: 0; bottom: -18px; width: min(68vw, 290px); opacity: 0.58; }
+        .footer { right: auto; left: 20px; }
+      }
+    </style>
   </head>
   <body class="app">
     <main class="splash-shell">
-      <img class="snoo" src="/snoo.png" alt="A Reddit survivor carrying supplies for the city" />
+      <img class="snoo" src="snoo.png" alt="A Reddit survivor carrying supplies for the city" />
       <div class="content">
         <p class="eyebrow">DAY ZERO · THE GATES ARE OPEN</p>
         <h1 class="title">ONE MORE DAWN</h1>
-        <p class="offer">Build the last city together.</p>
+        <p class="offer">Build the city together.</p>
       <p class="description">
           Spend today's energy, vote on the crisis, and leave your house standing in a city shared
           by this whole subreddit.

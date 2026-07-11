@@ -445,6 +445,22 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
 .vchip .wave-btn:active, .vchip .hi-btn:active { transform: translateY(1px); }
 .vchip .p-x { position: absolute; top: 8px; right: 8px; }
 
+/* ---- dash drawer: header + tabs stay pinned while the body scrolls, so the
+        close ✕ is always reachable no matter how deep the CITY tab goes ---- */
+.dash-sticky { position: sticky; top: -14px; z-index: 3; margin: -14px -14px 10px; padding: 12px 14px 8px; background: rgba(20, 15, 8, 0.96); border-radius: 16px 16px 0 0; }
+.dash-sticky .p-head { margin-bottom: 8px; }
+
+/* ---- advisor coachmarks — the guide that walks a new survivor in ---- */
+.coach { position: fixed; left: 50%; bottom: 170px; transform: translateX(-50%); z-index: 30; width: min(340px, calc(100vw - 24px)); padding: 12px 14px; border-radius: 14px; pointer-events: auto; }
+.coach .co-head { display: flex; align-items: center; gap: 8px; font-family: var(--pixel); font-size: 9px; letter-spacing: 1.5px; color: var(--gold); margin-bottom: 6px; }
+.coach .co-head .p-x { margin-left: auto; }
+.coach .co-body { font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--ink); }
+.coach .co-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.coach .co-step { font-family: var(--pixel); font-size: 8px; color: var(--muted); }
+.coach .co-next { margin-left: auto; font-family: var(--pixel); font-size: 9px; letter-spacing: 1px; color: #171109; background: var(--gold); border: 1px solid #80651f; border-radius: 8px; padding: 8px 14px; cursor: pointer; min-height: 34px; }
+@media (max-width: 640px) { .coach { bottom: 196px; } }
+@media (orientation: landscape) and (max-height: 500px) { .coach { bottom: 96px; width: min(300px, calc(100vw - 260px)); left: 42%; } }
+
 /* ---- villager name tags (CSS2DRenderer layer — never animate transform) ---- */
 .v-name { pointer-events: none; font-family: var(--pixel); font-size: 7.5px; letter-spacing: 1px; color: #9fc0ff; background: rgba(12, 14, 26, 0.85); border: 1px solid #33406e; border-radius: 6px; padding: 2px 7px; white-space: nowrap; opacity: 0; scale: 0.8; transition: opacity 0.2s, scale 0.2s; }
 .v-name.on { opacity: 1; scale: 1; }
@@ -453,9 +469,11 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
 .h-owner { pointer-events: none; font-family: var(--pixel); font-size: 7.5px; letter-spacing: 1px; color: #ffe9ad; background: rgba(26, 18, 6, 0.9); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; white-space: nowrap; opacity: 0; scale: 0.7; transition: opacity 0.25s, scale 0.25s; }
 .h-owner.on { opacity: 1; scale: 1; }
 
-/* ---- laptop fit (short desktop viewports: 768/800 tall) ---- */
+/* ---- laptop fit (short desktop viewports: 768/800 tall) ----
+   .dash must clear the fab row (top 84px + ~36px tall) — top:110 used to slide
+   the drawer under the mute fab in short webviews (Reddit desktop embed). */
 @media (min-width: 641px) and (max-height: 800px) {
-  .dash { top: 110px; max-height: calc(100vh - 220px); }
+  .dash { top: 128px; max-height: calc(100vh - 190px); }
 }
 
 @media (max-width: 640px) {

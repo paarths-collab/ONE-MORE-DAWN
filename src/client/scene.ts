@@ -1422,14 +1422,21 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       if (r > radius) radius = r;
       outline.push([Math.cos(a) * r, Math.sin(a) * r]);
     }
+    // Only VISIBLE districts/houses appear on the map — a fresh Camp's minimap
+    // must be as bare as its town (grow-in drives group.visible, see
+    // setBuildStage/setHouses).
     const districts: { name: string; icon: string; x: number; z: number }[] = [];
     for (const [name, group] of poiMap) {
+      if (!group.visible) continue;
       const icon = (group.userData.icon as string | undefined)
         ?? poiList.find((p) => p.name === name)?.icon
         ?? '📍';
       districts.push({ name, icon, x: group.position.x, z: group.position.z });
     }
-    return { radius, outline, districts, houses: houseCenters.map((h) => [...h] as [number, number]) };
+    const houses = houseGroups
+      .filter((g) => g.visible)
+      .map((g) => [g.position.x, g.position.z] as [number, number]);
+    return { radius, outline, districts, houses };
   }
   function getView() {
     return { cx: camera.position.x, cz: camera.position.z, tx: controls.target.x, tz: controls.target.z, fov: camera.fov };

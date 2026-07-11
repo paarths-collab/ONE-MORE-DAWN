@@ -315,6 +315,14 @@ async function liveSmoke(url) {
     await cdp.eval(`document.querySelector('.mute-fab')?.click()`); // restore + audible feedback
     await cdp.waitFor(`window.__omdAudioPlays.some((src) => src.includes('button_click.wav'))`, 'unmute sound feedback');
 
+    // Advisor coachmarks: appear once on a first visit, step through, persist.
+    await cdp.waitFor(`!!document.querySelector('.coach')`, 'advisor coach appears on first visit');
+    const coachHead = await cdp.eval(`document.querySelector('.coach .co-head span')?.textContent || ''`);
+    assert(coachHead.includes('ADVISOR'), 'coach chip is framed as the ADVISOR');
+    for (let i = 0; i < 3; i++) await cdp.eval(`document.querySelector('.coach .co-next')?.click()`);
+    await cdp.waitFor(`!document.querySelector('.coach')`, 'coach dismisses after GOT IT');
+    assert((await cdp.eval(`window.localStorage.getItem('omd_coach_v1')`)) === '1', 'coach marks itself seen');
+
     // The Dawn Report teaser and full ledger are both visible commands, so
     // exercise their open and close controls before changing dashboard tabs.
     await cdp.clickButton('VIEW');

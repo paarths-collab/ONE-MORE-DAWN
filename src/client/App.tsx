@@ -11,7 +11,7 @@ import {
 } from './scene';
 import { ApiFailure, getInit, getLeaderboard, getWorld, postAction, postAvatar, postPledge, postRole, postStrategy, postVote } from './api';
 import { isLocalHarnessHost, raidNoteFromEvents, worldUnavailableMessage } from './liveUi';
-import { isMuted, playSound, preloadSounds, toggleMuted } from './sound';
+import { isMuted, playSound, preloadSounds, toggleMuted, unlockAudio } from './sound';
 import type {
   ActionType,
   BuildingDef,
@@ -197,6 +197,41 @@ const STRATEGY_IDS: StrategyPlanId[] = ['stockpile_food', 'repair_power', 'prepa
 const PLEDGE_KINDS: PledgeKind[] = ['stand_vigil', 'share_rations', 'run_messages', 'back_council'];
 const ACTION_IDS: ActionType[] = ['grow_food', 'repair_power', 'treat_sick', 'guard_wall'];
 const MARKED_ICONS: Record<Marked['kind'], string> = { person: '🧒', place: '🏚️', symbol: '🕯️' };
+
+// Advisor coachmarks — a 3-step guided tour shown once after onboarding (and
+// replayable from the 🧭 fab). Persisted so it never nags a returning player.
+const COACH_KEY = 'omd_coach_v1';
+const coachSeen = (): boolean => {
+  try {
+    return window.localStorage.getItem(COACH_KEY) === '1';
+  } catch {
+    return true; // storage unavailable — never nag
+  }
+};
+const markCoachSeen = (): void => {
+  try {
+    window.localStorage.setItem(COACH_KEY, '1');
+  } catch {
+    /* storage unavailable */
+  }
+};
+const COACH_STEPS = [
+  {
+    icon: '⚡',
+    title: 'YOUR DAY',
+    text: 'You get energy every real day. Spend it on the bar below — grow food, repair, treat, guard — or open ▦ CITY and ADD LABOR to raise the next building.',
+  },
+  {
+    icon: '🗳️',
+    title: 'DECIDE TOGETHER',
+    text: "Open ▦ CITY → LIVE to vote on today's crisis, back a council plan, and pledge to save The Marked. The whole subreddit decides as one.",
+  },
+  {
+    icon: '🏠',
+    title: 'THE CITY REMEMBERS',
+    text: 'Your first contribution raises your own house in the town. Everything resolves at dawn — come back tomorrow to see what the city became.',
+  },
+] as const;
 
 // First-run onboarding role catalog — icon/label/blurb, exact copy per spec.
 const ROLE_CATALOG: { id: Role; icon: string; label: string; blurb: string }[] = [
@@ -1082,6 +1117,7 @@ function CityDashboard({
         ▦ CITY
       </button>
       <div className={open ? 'hud dash card-bit on' : 'hud dash card-bit'}>
+        <div className="dash-sticky">
         <div className="p-head">
           <span>CITY</span>
           <button type="button" className="p-x" onClick={() => setOpen(false)} aria-label="Close dashboard">
@@ -1102,6 +1138,7 @@ function CityDashboard({
           <button type="button" className={tab === 'top' ? 'dash-tab on' : 'dash-tab'} onClick={() => setTab('top')} aria-pressed={tab === 'top'}>
             TOP 🏆
           </button>
+        </div>
         </div>
 
         {tab === 'map' && (
@@ -1909,15 +1946,18 @@ function Loader({ pct, done }: { pct: number; done: boolean }) {
 // returning-but-roleless edge case) without setting a role server-side.
 function Onboarding({
   busy,
+  defaultName,
   onEnter,
   onDismiss,
 }: {
   busy: boolean;
+  /** Reddit username — prefilled so "skip it" visibly means "use my Reddit name". */
+  defaultName: string;
   onEnter: (role: Role, name: string) => void;
   onDismiss: () => void;
 }) {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(defaultName.slice(0, 24));
   const selectedLabel = ROLE_CATALOG.find((r) => r.id === selectedRole)?.label ?? '';
   return (
     <div className="hud onboard on">
@@ -2089,6 +2129,9 @@ export function App() {
   const [needsOnboard, setNeedsOnboard] = useState(false);
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
+  const [liveUsername, setLiveUsername] = useState(''); // Reddit username (prefills the survivor name)
+  // Advisor coachmarks: a 3-step guide after onboarding, replayable from the fab bar.
+  const [coachStep, setCoachStep] = useState<number | null>(null);
   // Fallen-city terminal state (live only): city.status === 'fallen'.
   const [cityFallen, setCityFallen] = useState(false);
   const [liveTimelineHeadline, setLiveTimelineHeadline] = useState<string | null>(null);
@@ -2229,6 +2272,7 @@ export function App() {
       setLiveMarked(init.marked);
       setLivePledge(init.pledge);
       setLiveEnergy({ effective: init.effectiveEnergy, used: init.player.energyUsedToday });
+      setLiveUsername(init.player.username ?? '');
       setLiveActions(init.yourActionsToday);
       setLiveStanding(init.standing);
       setLiveCycle(city.cycle);
@@ -2247,6 +2291,9 @@ export function App() {
       if (first && init.player.role === null) {
         setNeedsOnboard(true);
         setOnboardOpen(true);
+      } else if (first && !coachSeen()) {
+        // returning player who never saw the advisor — walk them in once
+        setCoachStep(0);
       }
       raidDaysRef.current = init.raidInDays;
       setRaidDays(init.raidInDays);
@@ -2319,6 +2366,11 @@ export function App() {
   // ---- V1 sound cues (local files, fail-silent; mute persists in localStorage) ----
   useEffect(() => {
     preloadSounds();
+    // Strict webviews (Reddit app) gate playback behind a user gesture — prime
+    // audio on pointerdown until one sticks (unlockAudio self-resets on failure).
+    const prime = () => unlockAudio();
+    window.addEventListener('pointerdown', prime, { passive: true });
+    return () => window.removeEventListener('pointerdown', prime);
   }, []);
   // Boolean state → the effect only re-fires on a real transition (no repeat on poll).
   useEffect(() => {
@@ -2503,6 +2555,7 @@ export function App() {
           pushNotif('🫡', `role set — ${roleLabel}`, 'good');
           setOnboardOpen(false);
           setNeedsOnboard(false);
+          if (!coachSeen()) setCoachStep(0); // the advisor picks up where onboarding ends
           // pull fresh player-derived state from the server
           const init = await getInit();
           applyInit(init, false);
@@ -2713,16 +2766,32 @@ export function App() {
     handleRef.current?.focusPoint?.(x, z);
   }, []);
 
-  // The day always turns — night → dawn → day → dusk, ~12s per phase. The
-  // visual cycle runs in BOTH modes (the server has no time-of-day), but only
-  // demo mode lets a dawn transition advance the day counter — in live mode
-  // the day is the server's.
+  // Time of day. LIVE: the sky follows the player's real local clock (each real
+  // day is one game day, so dawn/dusk land where they do outside the window).
+  // DEMO: the old fast ambient cycle (~12s per phase), where a dawn transition
+  // also advances the demo day counter.
   useEffect(() => {
-    const id = window.setInterval(() => {
-      const next = TIME_ORDER[(TIME_ORDER.indexOf(timeRef.current) + 1) % TIME_ORDER.length]!;
+    const liveTimeOfDay = (): TimeOfDay => {
+      const h = new Date().getHours();
+      if (h >= 5 && h < 9) return 'dawn';
+      if (h >= 9 && h < 17) return 'day';
+      if (h >= 17 && h < 20) return 'dusk';
+      return 'night';
+    };
+    const apply = (next: TimeOfDay) => {
+      if (next === timeRef.current) return;
       timeRef.current = next;
       setTimeState(next);
       handleRef.current?.setTimeOfDay(next);
+    };
+    if (modeRef.current === 'live') apply(liveTimeOfDay());
+    const id = window.setInterval(() => {
+      if (modeRef.current === 'live') {
+        apply(liveTimeOfDay());
+        return;
+      }
+      const next = TIME_ORDER[(TIME_ORDER.indexOf(timeRef.current) + 1) % TIME_ORDER.length]!;
+      apply(next);
       if (next === 'dawn' && modeRef.current === 'demo') {
         dayRef.current += 1;
         setDay(dayRef.current);
@@ -3332,7 +3401,57 @@ export function App() {
         >
           {muted ? '🔇' : '🔊'}
         </button>
+        <button
+          type="button"
+          className="mute-fab card-bit"
+          onClick={() => setCoachStep(0)}
+          aria-label="Open the advisor guide"
+          title="Advisor guide"
+        >
+          🧭
+        </button>
       </div>
+      {coachStep !== null && !showOnboard && !showFallen && COACH_STEPS[coachStep] && (
+        <div className="coach card-bit">
+          <div className="co-head">
+            <span>
+              {COACH_STEPS[coachStep].icon} ADVISOR — {COACH_STEPS[coachStep].title}
+            </span>
+            <button
+              type="button"
+              className="p-x"
+              onClick={() => {
+                markCoachSeen();
+                setCoachStep(null);
+              }}
+              aria-label="Dismiss advisor"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="co-body">{COACH_STEPS[coachStep].text}</div>
+          <div className="co-foot">
+            <span className="co-step">
+              {coachStep + 1}/{COACH_STEPS.length}
+            </span>
+            <button
+              type="button"
+              className="co-next"
+              onClick={() => {
+                playSound('button_click');
+                if (coachStep + 1 < COACH_STEPS.length) {
+                  setCoachStep(coachStep + 1);
+                } else {
+                  markCoachSeen();
+                  setCoachStep(null);
+                }
+              }}
+            >
+              {coachStep + 1 < COACH_STEPS.length ? 'NEXT →' : 'GOT IT'}
+            </button>
+          </div>
+        </div>
+      )}
       <StatsModal
         open={statsOpen}
         onClose={() => setStatsOpen(false)}
@@ -3395,7 +3514,7 @@ export function App() {
           }}
         />
       )}
-      {showOnboard && <Onboarding busy={onboardBusy} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
+      {showOnboard && <Onboarding busy={onboardBusy} defaultName={liveUsername} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
       {showFallen && (
         <FallenScreen
           epitaph={fallenEpitaph}
