@@ -10,6 +10,8 @@ export const KEYS = {
   lbScouts: 'lb:scouts',
   housesIndex: 'houses:index',
   housesMeta: 'houses:meta',
+  landFunding: 'land:funding',
+  landProjectLock: (projectId: string) => `land:lock:${projectId}`,
   timeline: 'timeline',
   cityHistory: 'city:history',
   resolverLock: 'resolver:lock',

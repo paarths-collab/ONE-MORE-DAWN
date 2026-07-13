@@ -9,9 +9,10 @@ Add a small, server-authoritative reward economy that strengthens the existing
 
 1. Helpful actions earn Coins.
 2. Coins buy persistent personal house cosmetics.
-3. Players can fund shared cosmetic civic projects for built structures such as
-   the Wall.
-4. A separate localhost-only showcase branch provides deterministic scenes for
+3. Players pool Coins to unlock expensive, connected land districts that expand
+   the shared city beyond its starting settlement.
+4. Built structures such as the Wall can gain shared decorations later.
+5. A separate localhost-only showcase branch provides deterministic scenes for
    rehearsing and recording the launch video.
 
 This is not a paid currency and does not sell power.
@@ -39,6 +40,20 @@ This is not a paid currency and does not sell power.
 - The actual Wall remains a shared labor unlock. It cannot be personally bought.
 - Wall shop items are decorations that remain locked until the Wall exists.
 
+### Community land expansion
+
+- The city sits on one continuous mainland, not a set of floating islands.
+- The initial settlement occupies only the central developed district; adjoining
+  terrain is visible but undeveloped and locked.
+- Land is owned by the subreddit-city. Players fund it together; no Redditor
+  privately owns, trades, or resells a parcel.
+- Districts unlock sequentially so every expansion remains physically connected
+  to the existing city.
+- Land does not add combat power by itself. It creates room for more houses,
+  roads, and already-balanced civic buildings.
+- Unlocked land survives Phoenix cycles as community legacy. A full moderator
+  reset clears expansion funding and returns the installation to the core plot.
+
 ### Initial catalog
 
 Personal house cosmetics:
@@ -51,16 +66,16 @@ Personal house cosmetics:
 | Slate Roof | roof | 8 | Dark slate roof material |
 | Dawn-Gold Trim | roof | 12 | Gold roof trim and ridge cap |
 
-Shared civic projects:
+Shared land projects:
 
 | Project | Requirement | Community target | Three.js result |
 | --- | --- | ---: | --- |
-| Gate Braziers | Watchtower built | 20 Coins | Two lit gate braziers |
-| Wall Standards | Wall built | 30 Coins | Banners on the finished Wall |
-| Council Bell | Council Hall built | 40 Coins | Bell and banner at the hall |
+| Outer Fields | Core settlement | 120 Coins | Opens connected farmland and house plots |
+| River Ward | Outer Fields unlocked | 260 Coins | Extends roads and plots along the river |
+| High Keep | River Ward unlocked | 450 Coins | Opens the hill for walls and civic landmarks |
 
-Start with the five personal items. Civic projects are the second milestone and
-must not delay testing the core currency and purchase path.
+Start with the five personal items. Connected land funding is the second
+milestone and must not weaken testing of the core currency and purchase path.
 
 ## 2. Shared contract
 
@@ -93,6 +108,10 @@ export type EconomyState = {
   equipped: Partial<Record<CosmeticSlot, ShopItemId>>;
 };
 ```
+
+The same shared module defines `LandExpansionId`, `LandExpansionProject`, and
+`LandExpansionState`. Targets and prerequisites come only from the shared
+catalog; clients cannot submit a target or unlock flag.
 
 `PlayerProfile` gains backward-compatible economy fields. `Store.revivePlayer`
 must default old saves to 0 Coins, no owned items, and no equipped items.
@@ -127,7 +146,7 @@ Add:
 
 - `POST /api/shop/purchase` with `{ itemId }`;
 - `POST /api/shop/equip` with `{ itemId }`;
-- later, `POST /api/shop/donate` with `{ projectId, amount }`.
+- `POST /api/shop/donate` with `{ projectId, amount }` for shared land.
 
 Every route must:
 
@@ -138,15 +157,18 @@ Every route must:
 - use `beginUserLock` and update the complete player JSON atomically;
 - return 409 on a same-user conflict instead of charging twice.
 
-For civic projects, use an installation-scoped Redis hash and atomic `hIncrBy`.
-Debit the player's Coins and increment the civic fund in one transaction. Read
-the resulting total after commit; concurrent donations commute safely.
+For land projects, use an installation-scoped Redis hash and a project lock.
+Debit the player's Coins and increment the shared fund in one transaction.
+Watch both the user lock and project lock so simultaneous donations cannot
+overfund a completed district or charge Coins that were not applied. Only the
+next connected project accepts donations.
 
 ### Reset behavior
 
 - Phoenix cycle: preserve Coins and personal inventory.
-- Full moderator reset: clear player economy with `players` and clear civic
-  project funding.
+- Phoenix cycle: preserve unlocked land and its funding.
+- Full moderator reset: clear player economy with `players` and clear land
+  expansion funding.
 - Malformed economy data: `revivePlayer` falls back safely; `/api/init` must not
   throw.
 
@@ -157,7 +179,7 @@ the resulting total after commit; concurrent donations commute safely.
 - Add `SHOP` as a fifth CITY drawer tab: `MAP | CITY | LIVE | TOP | SHOP`.
 - Show the Coin balance in the SHOP header, not as another permanent top-bar
   pill; the mobile HUD is already dense.
-- Use two shop segments: `HOUSE` and `CIVIC`.
+- Use two shop segments: `HOUSE` and `EXPAND`.
 - Keep the drawer closed at boot on phones, as it is today.
 
 ### Shop rows
@@ -189,8 +211,10 @@ Do not rebuild the town or replace the house registry.
 - Banner: a small plane/cloth mesh attached to the house.
 - Garden: a few low-poly primitives next to the house footprint.
 - Roof variants: swap only the current house roof material/trim.
-- Civic projects attach to existing Watchtower, Wall, and Council Hall groups.
-- Hide civic decorations when their prerequisite building is not unlocked.
+- Replace the isolated floating-island silhouette with one bounded mainland
+  terrain mesh. Locked districts remain visible as undeveloped ground beyond a
+  clear frontier; unlocking extends roads, house plots, and camera bounds.
+- Keep district geometry connected to the current settlement at every stage.
 - Reapply equipped cosmetics whenever `setHouses` remaps the current user's
   house after a refresh.
 
@@ -269,9 +293,9 @@ touches them.
 | Release integration or showcase | 0.5 day | 0.5 day |
 | Launch-slice total | 3-4 days | 3-4 days |
 
-For the optional civic milestone, Codex owns civic Redis/API/reset logic and
-Claude owns civic UI/Three.js decorations. Budget 1-1.5 additional days per
-agent. This keeps the optional work equally split as well.
+For the land milestone, Codex owns funding, locking, persistence, and reset
+logic. Claude owns the connected terrain, district frontier, roads, plots, and
+expansion UI. Budget 1.5-2.5 additional days per agent.
 
 ## 6. Delivery branches and PRs
 
@@ -309,17 +333,18 @@ Do not mix those files into the economy history.
 - Local mock API support.
 - Client smoke for earn, buy, equip, refresh, and mobile layout.
 
-### PR 4A - Codex, optional: `codex/civic-projects-server`
+### PR 4A - Codex: `codex/community-land-server`
 
-- Shared civic funding, atomic donations, prerequisites, and reset behavior.
+- Shared land funding, atomic donations, sequential prerequisites, and reset behavior.
 - Server and two-user API coverage.
 
-### PR 4B - Claude, optional: `claude/civic-projects-client`
+### PR 4B - Claude: `claude/connected-city-expansion`
 
-- Gate, Wall, and Council Hall decorations.
-- Civic contribution UI, local mocks, and client smoke coverage.
+- Continuous mainland terrain, district frontiers, roads, and new house plots.
+- EXPAND contribution UI, local mocks, and client smoke coverage.
 
-Both PR 4 branches can move post-launch without weakening the personal shop.
+PRs 4A and 4B are a paired milestone. They can move post-launch without
+weakening the personal shop, but neither should ship alone.
 
 ### Merge order
 
@@ -346,7 +371,9 @@ Server tests:
 - only owned items can be equipped;
 - old and malformed player JSON safely defaults;
 - Phoenix preserves economy; full reset clears it;
-- civic project increments remain correct with two users.
+- land funding remains exact with two simultaneous users;
+- districts cannot unlock out of order or receive funding after completion;
+- Phoenix preserves land while a full reset clears it.
 
 Client smoke:
 
@@ -356,7 +383,8 @@ Client smoke:
 - item changes from available to owned to equipped;
 - refresh preserves ownership/equipment;
 - current house visibly receives the cosmetic;
-- civic items stay locked before their building exists;
+- EXPAND shows the one connected project currently available;
+- unlocked land expands camera bounds and visible house plots;
 - SHOP fits desktop, phone landscape, and portrait advisory layouts;
 - no production mode uses showcase fixtures.
 
@@ -366,7 +394,7 @@ Human Devvit smoke:
 - balances persist through close/reopen and UTC dawn;
 - duplicate taps do not mint or charge twice;
 - another player can see the equipped house cosmetic;
-- civic donations combine across accounts;
+- land donations combine across accounts without overcharging;
 - moderator reset and Phoenix behavior match the contract;
 - audio, shop, and CITY controls fit the Reddit mobile webview.
 
@@ -382,8 +410,8 @@ It may change only local tooling and recording fixtures:
 - start with 12 Coins, four owned cosmetics, one affordable unowned item, a
   visible personal house, and two world cities;
 - keep purchase/equip endpoints stateful so recorded clicks are real;
-- provide deterministic local states for city, shop, raid warning, dawn report,
-  and world view;
+- provide deterministic local states for city, shop, land expansion, raid
+  warning, dawn report, and world view;
 - add `tools/showcase-smoke.mjs` that verifies each recording state boots;
 - never expose showcase switches in the Devvit production bundle;
 - never show a fake `LIVE` claim or imply mock users are real Reddit activity.
@@ -400,7 +428,7 @@ of Redis persistence and multiplayer behavior from the private Devvit playtest.
 | 12-19s | Submit one daily action | `+1 Coin`, contribution, city consequence |
 | 19-30s | Open SHOP, buy and equip Hearth Lantern | Real balance debit and owned/equipped state |
 | 30-36s | Fly camera to the house | Visible lantern on the player's actual house |
-| 36-43s | Show Wall civic project | Community target; Wall remains a shared build |
+| 36-43s | Fund and unlock Outer Fields | Shared Coins visibly expand connected city land |
 | 43-51s | Crisis vote, council choice, and The Marked | Reddit-scale collective decisions |
 | 51-58s | Raid warning into Dawn Report | Return-at-dawn consequence loop |
 | 58-65s | WORLD view with two cities | Multiple subreddits, one city each |
@@ -411,11 +439,11 @@ the cursor deliberate, music low, SFX audible, and advisor already completed.
 ## 10. Effort and launch decision
 
 - Personal Coins and five-item house shop: 3-5 engineering days.
-- Civic Wall/Watchtower/Council projects: 2-3 additional days.
+- Connected land funding and Three.js expansion: 3-5 additional days.
 - Deterministic showcase branch and recording rehearsal: 1 day.
 - Real two-account Devvit regression and fixes: 1 day minimum.
 
-Total for the full plan: approximately 6-9 engineering days plus the human
+Total for the full plan: approximately 7-11 engineering days plus the human
 private-subreddit test. If the launch deadline is tighter, merge PRs 1-3,
 record the personal house shop, and move PR 4 to the first post-launch update.
 
@@ -425,7 +453,8 @@ record the personal house shop, and move PR 4 to the first post-launch update.
 - No negative balance, duplicate charge, retry mint, or forged-price path.
 - Coins and shop reinforce contributions without selling survival power.
 - Equipped cosmetics appear on the correct Redditor's existing house.
-- The existing Wall is still built by shared labor.
+- The existing Wall is still built by shared labor; land only creates room.
+- Every unlocked district is connected to the existing mainland city.
 - Typecheck, lint, all tests, build, and client smoke pass.
 - Private two-account Devvit smoke passes.
 - Showcase branch remains local-only and is not merged or deployed.
