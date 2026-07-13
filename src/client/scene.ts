@@ -144,9 +144,9 @@ type EnvPreset = {
 };
 const PRESETS: Record<TimeOfDay, EnvPreset> = {
   night: {
-    bg: 0x141b2d, fogNear: 138, fogFar: 525,
-    hemiSky: 0x2a3654, hemiGround: 0x0c1018, hemiInt: 0.55,
-    sunColor: 0x8fa5d8, sunInt: 0.4, sunPos: [-40, 85, -30],
+    bg: 0x202a42, fogNear: 138, fogFar: 525,
+    hemiSky: 0x526789, hemiGround: 0x171d28, hemiInt: 0.78,
+    sunColor: 0x9fb6e8, sunInt: 0.62, sunPos: [-40, 85, -30],
     stars: 1, windowCol: 0xffc46a, discCol: 0xdfe8ff, discScale: 3.4, campfire: 30,
   },
   dawn: {
@@ -196,7 +196,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   scene.fog = new THREE.Fog(PRESETS.dawn.bg, PRESETS.dawn.fogNear, PRESETS.dawn.fogFar);
 
   const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 1000);
-  camera.position.set(5, 82, 110);
+  camera.position.set(5, 70, 94);
 
   const size = () => {
     const w = Math.max(1, container.clientWidth);
@@ -1992,7 +1992,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
 
   // ---------- one-redditor-one-house overlay (setHouses) ----------
   // Houses reveal by CONTRIBUTOR COUNT (not build stage): index 0 is the founding
-  // house, your house is highlighted, top contributors get name labels, and tier
+  // house, your house is highlighted, and notable houses scale by tier
   // scales the notable houses. Idempotent — decor is cleared + re-applied each call.
   const houseDecor: THREE.Object3D[] = [];
   const TIER_SCALE = [1, 1, 1.16, 1.32, 1.5]; // by tier 0..4
@@ -2056,18 +2056,13 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
         ringHouse(g);
         labelHouse(g, 'u/you', 2.7);
       }
-      // named top contributors — scale all by tier, but only label the top few so
-      // the skyline doesn't drown in username banners.
-      let labelled = 0;
+      // Named contributors scale by tier. Founder and current player remain the
+      // only persistent labels so the city stays readable at the default zoom.
       for (const n of summary.named ?? []) {
         if (n.index <= 0 || n.index >= total) continue;
         if (yours && n.index === yours.index) continue; // already labelled as yours
         const g = houses[n.index]!;
         g.scale.setScalar(scaleFor(n.tier));
-        if (labelled < 3) {
-          labelHouse(g, `u/${n.username}`, 2.6);
-          labelled++;
-        }
       }
     } catch {
       /* cosmetic overlay — never throw into the caller */

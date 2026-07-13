@@ -10,7 +10,7 @@ import {
   type VillageHooks,
 } from './scene';
 import { ApiFailure, getInit, getLeaderboard, getWorld, postAction, postAvatar, postPledge, postRekindle, postRole, postStrategy, postVote } from './api';
-import { isLocalHarnessHost, raidNoteFromEvents, worldUnavailableMessage } from './liveUi';
+import { isLocalHarnessHost, raidNoteFromEvents, raidOutcomeFromTimeline, worldUnavailableMessage } from './liveUi';
 import { BALANCE } from '../shared/balance';
 import { cityEpithet } from '../shared/cityName';
 import { navigateTo } from '@devvit/web/client';
@@ -765,6 +765,8 @@ type LiveState = {
   hiCooldown: boolean;
   onSayHi: () => void;
   villager: string | null;
+  commentsUrl: string | null;
+  onOpenComments: () => void;
   crisisVotes: Record<CrisisOptId, number>;
   myCrisisVote: CrisisOptId | null;
   onCrisisVote: (id: CrisisOptId) => void;
@@ -783,6 +785,8 @@ function LiveTab({
   hiCooldown,
   onSayHi,
   villager,
+  commentsUrl,
+  onOpenComments,
   crisisVotes,
   myCrisisVote,
   onCrisisVote,
@@ -854,6 +858,21 @@ function LiveTab({
           {hiCooldown ? '…' : villager ? `👋 SAY HI to @${villager}` : '👋 SAY HI'}
         </button>
       </div>
+
+      {liveData && commentsUrl && (
+        <div className="council-thread">
+          <div className="ct-title">THE COUNCIL THREAD</div>
+          <div className="mini-cap">Debate with your subreddit, then cast the binding vote below.</div>
+          <button
+            type="button"
+            className="say-hi council-comments"
+            data-comments-url={commentsUrl}
+            onClick={onOpenComments}
+          >
+            💬 OPEN REDDIT COMMENTS
+          </button>
+        </div>
+      )}
 
       <div className="p-sec">TODAY'S CRISIS</div>
       <div className="crisis">
@@ -2426,6 +2445,7 @@ export function App() {
   const [onboardBusy, setOnboardBusy] = useState(false);
   const [liveUsername, setLiveUsername] = useState(''); // Reddit username (prefills the survivor name)
   const [liveCityName, setLiveCityName] = useState<string | null>(null); // this city's ancient name (per-subreddit)
+  const [livePostId, setLivePostId] = useState<string | null>(null);
   const [liveChallenge, setLiveChallenge] = useState<InitResponse['challenge'] | null>(null); // today's personal mission
   const challengeDoneRef = useRef(false); // last seen done-state, for the completion cheer
   const [liveStreak, setLiveStreak] = useState(0); // consecutive-day streak (server-tracked)
@@ -2628,6 +2648,7 @@ export function App() {
       setLiveEnergy({ effective: init.effectiveEnergy, used: init.player.energyUsedToday });
       setLiveUsername(init.player.username ?? '');
       setLiveCityName(init.cityName || null);
+      setLivePostId(init.postId || null);
       // Daily mission: track completion transitions so finishing mid-session
       // cheers exactly once (never on boot, never again on later polls).
       const ch = init.challenge ?? null;
@@ -2712,10 +2733,13 @@ export function App() {
         pushEvent('🌅', `Dawn broke over the city, day ${city.day}, still standing.`);
         // last night's raid, if the timeline recorded one
         const t = init.timelinePreview;
-        if (t && (t.deltas.population ?? 0) < 0 && t.events.some((e) => /raid|red signal/i.test(e))) {
-          const line = t.events.find((e) => /raid|red signal/i.test(e)) ?? 'Raiders came in the night.';
-          pushNotif('⚔', line, 'bad');
-          pushEvent('⚔', line);
+        const raidOutcome = raidOutcomeFromTimeline(t?.events, t?.deltas.population);
+        if (raidOutcome) {
+          const breached = raidOutcome.title === 'THE WALL WAS BREACHED';
+          showEpic(raidOutcome.title, raidOutcome.line);
+          pushNotif('⚔', raidOutcome.line, breached ? 'bad' : 'good');
+          pushEvent('⚔', raidOutcome.line);
+          playSound(breached ? 'raid_warning' : 'dawn_report');
         }
       }
     },
@@ -3373,6 +3397,17 @@ export function App() {
     }, 6000);
   }, [pushTalk, pushNotif]);
 
+  const commentsUrl = useMemo(() => {
+    const id = livePostId?.replace(/^t3_/, '').trim();
+    return id ? `https://www.reddit.com/comments/${id}` : null;
+  }, [livePostId]);
+
+  const onOpenComments = useCallback(() => {
+    if (!commentsUrl) return;
+    playSound('button_click');
+    navigateTo(commentsUrl);
+  }, [commentsUrl]);
+
   // villager chip actions, wave at / deselect the clicked villager
   const onWaveAt = useCallback(() => {
     const target = villagerRef.current;
@@ -3898,6 +3933,8 @@ export function App() {
           hiCooldown,
           onSayHi,
           villager,
+          commentsUrl,
+          onOpenComments,
           crisisVotes,
           myCrisisVote,
           onCrisisVote,

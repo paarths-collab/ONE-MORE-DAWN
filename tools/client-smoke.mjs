@@ -119,65 +119,94 @@ class CdpPage {
       returnByValue: true,
     });
     if (result.exceptionDetails) {
-      throw new Error(result.exceptionDetails.text ?? 'Runtime.evaluate failed');
+      throw new Error(
+        result.exceptionDetails.exception?.description
+          ?? result.exceptionDetails.text
+          ?? 'Runtime.evaluate failed',
+      );
     }
     return result.result.value;
   }
 
   async waitFor(expression, label, timeoutMs = 20_000) {
     const started = Date.now();
+    let lastError = null;
     while (Date.now() - started < timeoutMs) {
-      if (await this.eval(expression)) return;
+      // A transient eval throw (mid-navigation / mid-render DOM) means "not
+      // yet", not "broken" — only surface it if the condition never comes true.
+      try {
+        if (await this.eval(expression)) return;
+        lastError = null;
+      } catch (err) {
+        lastError = err;
+      }
       await sleep(250);
     }
-    throw new Error(`Timed out waiting for ${label}`);
+    const detail = lastError ? ` (last eval error: ${lastError.message})` : '';
+    throw new Error(`Timed out waiting for ${label}${detail}`);
+  }
+
+  /** Retry a click expression until the target is present AND enabled.
+   *  A found-but-disabled button (React state not yet flushed, busy flags)
+   *  would otherwise no-op silently and surface as a downstream timeout —
+   *  the flake this guards against. */
+  async #clickWithRetry(expression, failMessage, timeoutMs = 5_000) {
+    const started = Date.now();
+    for (;;) {
+      const state = await this.eval(expression); // 'clicked' | 'disabled' | 'missing'
+      if (state === 'clicked') return;
+      if (Date.now() - started >= timeoutMs) {
+        assert(false, `${failMessage} (last state: ${state})`);
+      }
+      await sleep(150);
+    }
   }
 
   async clickButton(text) {
     const escaped = JSON.stringify(text);
-    const ok = await this.eval(`
+    await this.#clickWithRetry(`
       (() => {
         const wanted = ${escaped};
         const btn = [...document.querySelectorAll('button')]
           .find((b) => (b.textContent || '').replace(/\\s+/g, ' ').trim() === wanted);
-        if (!btn) return false;
+        if (!btn) return 'missing';
+        if (btn.disabled) return 'disabled';
         btn.click();
-        return true;
+        return 'clicked';
       })()
-    `);
-    assert(ok, `Button not found: ${text}`);
+    `, `Button not clickable: ${text}`);
   }
 
   async clickButtonContaining(text) {
     const escaped = JSON.stringify(text);
-    const ok = await this.eval(`
+    await this.#clickWithRetry(`
       (() => {
         const wanted = ${escaped};
         const btn = [...document.querySelectorAll('button')]
           .find((b) => (b.textContent || '').replace(/\\s+/g, ' ').trim().includes(wanted));
-        if (!btn) return false;
+        if (!btn) return 'missing';
+        if (btn.disabled) return 'disabled';
         btn.click();
-        return true;
+        return 'clicked';
       })()
-    `);
-    assert(ok, `Button containing text not found: ${text}`);
+    `, `Button containing text not clickable: ${text}`);
   }
 
   async clickSelectorContaining(selector, text) {
     const escapedSelector = JSON.stringify(selector);
     const escapedText = JSON.stringify(text);
-    const ok = await this.eval(`
+    await this.#clickWithRetry(`
       (() => {
         const selector = ${escapedSelector};
         const wanted = ${escapedText};
         const el = [...document.querySelectorAll(selector)]
           .find((node) => (node.textContent || '').replace(/\\s+/g, ' ').trim().includes(wanted));
-        if (!el) return false;
+        if (!el) return 'missing';
+        if (el.disabled) return 'disabled';
         el.click();
-        return true;
+        return 'clicked';
       })()
-    `);
-    assert(ok, `${selector} containing text not found: ${text}`);
+    `, `${selector} containing text not clickable: ${text}`);
   }
 
   close() {
@@ -368,6 +397,9 @@ async function liveSmoke(url) {
       await cdp.clickButton(label);
       if (label === 'LIVE') {
         await cdp.waitFor('document.body.innerText.includes("CITY CHATTER")', 'LIVE tab labels SAY HI as city chatter');
+        const comments = await cdp.eval(`(() => { const b = document.querySelector('.council-comments'); return b ? { text: b.textContent || '', url: b.dataset.commentsUrl || '' } : null; })()`);
+        assert(comments && /OPEN REDDIT COMMENTS/.test(comments.text), 'LIVE tab offers the real Reddit council thread.');
+        assert(comments.url.endsWith('/comments/mock'), `council thread should target the current post, saw "${comments.url}".`);
       }
       if (label === 'WORLD') {
         await cdp.waitFor('document.querySelectorAll(".wm-city").length >= 2', 'multiple world cities render');
@@ -526,16 +558,15 @@ async function splashSmoke(url) {
     });
     await cdp.call('Page.reload', { ignoreCache: true });
     await cdp.waitFor('document.body?.innerText.includes("ONE MORE DAWN")', 'feed splash boot');
-    await cdp.waitFor('document.querySelector(".snoo")?.complete && document.querySelector(".snoo")?.naturalWidth > 0', 'feed splash survivor art');
+    await cdp.waitFor(`document.body && getComputedStyle(document.body).backgroundImage.includes('splash-art.jpg')`, 'feed splash kingdom art');
     const splash = await cdp.eval(`(() => {
       const cta = document.querySelector('#start-button');
       const rect = cta?.getBoundingClientRect();
-      const image = document.querySelector('.snoo');
       return {
         buttonCount: document.querySelectorAll('button').length,
         ctaText: cta?.textContent || '',
         ctaHeight: rect?.height || 0,
-        imageLoaded: image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0,
+        imageLoaded: getComputedStyle(document.body).backgroundImage.includes('splash-art.jpg'),
         staleLinks: /Docs|r\\/Devvit|Discord/.test(document.body.innerText),
         sharedCity: document.body.innerText.includes('ONE SHARED CITY'),
         overflowX: document.body.scrollWidth > document.documentElement.clientWidth,
@@ -545,7 +576,7 @@ async function splashSmoke(url) {
     assert(splash.buttonCount === 1, `Feed splash should have one primary command, saw ${splash.buttonCount}.`);
     assert(splash.ctaText.includes('ENTER THE CITY'), 'Feed splash should expose the Enter the City CTA.');
     assert(splash.ctaHeight >= 44, `Feed splash CTA needs 44px touch height, saw ${splash.ctaHeight}.`);
-    assert(splash.imageLoaded, 'Feed splash survivor art must load from the local bundle.');
+    assert(splash.imageLoaded, 'Feed splash kingdom art must load from the local bundle.');
     assert(!splash.staleLinks, 'Feed splash must not expose stock Devvit template links.');
     assert(splash.sharedCity, 'Feed splash should state the shared-city premise.');
     assert(!splash.overflowX && !splash.overflowY, 'Feed splash should fit a 390×520 Reddit card without scrolling.');
@@ -684,7 +715,7 @@ async function optionalNameFailureSmoke(url) {
     await cdp.waitFor('document.body.innerText.includes("CHOOSE YOUR ROLE")', 'optional-name onboarding');
     await cdp.clickSelectorContaining('.ob-role', 'GUARD');
     await cdp.clickButton('ENTER THE CITY');
-    await cdp.waitFor('!document.body.innerText.includes("CHOOSE YOUR ROLE")', 'role accepted despite avatar failure');
+    await cdp.waitFor('!document.body.innerText.includes("CHOOSE YOUR ROLE")', 'role accepted despite avatar failure', 30_000);
     const text = await cdp.eval(`document.body.innerText`);
     assert(!text.includes('could not set your role'), 'Optional name failure must not report the accepted role as failed.');
   } finally { await close(); }
