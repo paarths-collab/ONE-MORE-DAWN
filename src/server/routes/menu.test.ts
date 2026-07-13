@@ -153,7 +153,12 @@ describe('/internal/menu/* authorization', () => {
     asModerator();
     await store.setCityState({ ...newCityState(2), day: 4 });
     // Populate a lived-in city so the destructive clear has something to remove.
-    await store.savePlayer(freshPlayer('t2_a', 'a', 4));
+    await store.savePlayer({
+      ...freshPlayer('t2_a', 'a', 4),
+      coins: 8,
+      ownedCosmetics: ['hearth_lantern'],
+      equippedCosmetics: { light: 'hearth_lantern' },
+    });
     await store.savePlayer(freshPlayer('t2_b', 'b', 4));
     await store.addContribution('t2_a', 10);
     await store.registerHouse('t2_a');
@@ -165,9 +170,11 @@ describe('/internal/menu/* authorization', () => {
     await store.appendTimeline(past);
     await fake.hSet(KEYS.dayVoters(4), { t2_a: 'a' });
     await fake.hSet(KEYS.dayVotes(4), { a: '1' });
+    await fake.hSet(KEYS.landFunding, { outer_fields: '75' });
     // Sanity: populated before the reset.
     expect(await store.getHouseCount()).toBe(2);
     expect(await store.getAllPlayers()).toHaveLength(2);
+    expect((await store.getPlayer('t2_a'))?.coins).toBe(8);
 
     const res = await menu.request('/reset', { method: 'POST' });
     expect(res.status).toBe(200);
@@ -177,6 +184,7 @@ describe('/internal/menu/* authorization', () => {
     expect(await store.getTimeline(10)).toEqual([]);
     expect(await store.getHouseCount()).toBe(0);
     expect(await store.getVoteTally(4)).toEqual({});
+    expect((await store.getLandExpansionState()).projects[0]?.funded).toBe(0);
     const fresh = await store.getCityState();
     expect(fresh?.cycle).toBe(3);
     expect(fresh?.day).toBe(1);

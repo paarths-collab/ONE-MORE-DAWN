@@ -60,6 +60,18 @@ describe('beginUserLock', () => {
     expect(await redis.hGet(KEYS.players, 't2_bob')).toBe('B');
   });
 
+  it('serializes different users when they fund the same shared project', async () => {
+    const redis = makeFakeRedis();
+    const projectLock = KEYS.landProjectLock('outer_fields');
+    const alice = await beginUserLock(redis, 't2_alice', [projectLock]);
+    const bob = await beginUserLock(redis, 't2_bob', [projectLock]);
+
+    expect(await alice.commit(hSetPlayer('t2_alice', 'A'))).toBe(true);
+    expect(await bob.commit(hSetPlayer('t2_bob', 'B'))).toBe(false);
+    expect(await redis.get(projectLock)).toBe('1');
+    expect(await redis.hGet(KEYS.players, 't2_bob')).toBeUndefined();
+  });
+
   it('abort() releases the watch without writing, so a later same-user commit is uncontested', async () => {
     const redis = makeFakeRedis();
     const a = await beginUserLock(redis, 't2_ab');

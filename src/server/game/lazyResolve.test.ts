@@ -88,10 +88,17 @@ describe('runLazyResolution', () => {
       injuredUntilDay: 10,
       roleChangedDay: 8,
       streak: 7,
+      coins: 18,
+      coinsEarnedToday: 5,
+      coinsEarnedCycle: 2,
+      coinsEarnedDay: 9,
+      ownedCosmetics: ['hearth_lantern'],
+      equippedCosmetics: { light: 'hearth_lantern' },
     });
     await store.addContribution('t2_vet', 120); // lifetime score → house tier legacy
     await store.registerHouse('t2_vet');
     await redis.hSet(KEYS.dayVoters(9), { t2_vet: 'a' });
+    await redis.hSet(KEYS.landFunding, { outer_fields: '120', river_ward: '40' });
 
     const { city, resolving } = await runLazyResolution(store, redis, new Date('2026-07-05T10:00:00Z'), 77);
     expect(resolving).toBe(false);
@@ -108,11 +115,18 @@ describe('runLazyResolution', () => {
       injuredUntilDay: 0,
       roleChangedDay: 0,
       streak: 7,
+      coins: 18,
+      ownedCosmetics: ['hearth_lantern'],
+      equippedCosmetics: { light: 'hearth_lantern' },
     });
     expect(await store.getContributionScore('t2_vet')).toBe(120);
     // City reset: houses and day-scoped ballots cleared.
     expect(await store.getHouseCount()).toBe(0);
     expect(await store.getVoteTally(9)).toEqual({});
+    expect(await store.getLandExpansionState()).toMatchObject({
+      activeProjectId: 'river_ward',
+      unlocked: ['outer_fields'],
+    });
     // The city remembers: a FROM THE ASHES entry heads the kept timeline.
     const timeline = await store.getTimeline(3);
     expect(timeline[0]?.headline).toContain('FROM THE ASHES');

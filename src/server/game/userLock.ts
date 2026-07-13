@@ -52,9 +52,14 @@ export type UserLock = {
  * commit, exactly like a raw watch/multi block — this only narrows the watched
  * key from the global hash to the single user's lock.
  */
-export const beginUserLock = async (redis: LockableRedis, userId: string): Promise<UserLock> => {
+export const beginUserLock = async (
+  redis: LockableRedis,
+  userId: string,
+  sharedLockKeys: readonly string[] = [],
+): Promise<UserLock> => {
   const lockKey = KEYS.playerLock(userId);
-  const tx = await redis.watch(lockKey);
+  const lockKeys = [...new Set([lockKey, ...sharedLockKeys])];
+  const tx = await redis.watch(...lockKeys);
   return {
     abort: async () => {
       await tx.unwatch();
@@ -62,8 +67,9 @@ export const beginUserLock = async (redis: LockableRedis, userId: string): Promi
     commit: async (queueWrites) => {
       await tx.multi();
       await queueWrites(tx);
-      // Mutate the watched key so a concurrent same-user commit aborts one side.
-      await tx.incrBy(lockKey, 1);
+      // Mutate every watched lock. Shared project locks serialize donations
+      // from different users without making unrelated player writes conflict.
+      for (const key of lockKeys) await tx.incrBy(key, 1);
       try {
         const results = await tx.exec();
         return results.length > 0;

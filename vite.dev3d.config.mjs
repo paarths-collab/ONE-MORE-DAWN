@@ -61,7 +61,21 @@ const PLAYER = {
   userId: 't2_mock', username: 'mock_user', role: 'guard', roleChangedDay: 1, faction: null, factionRep: 0,
   roleRep: {}, title: 'Wall-Warden', avatar: null, energyUsedToday: 1, lastActiveDay: 6,
   injuredUntilDay: 0, totalContribution: 14, streak: 3, lapsedStreak: 12,
+  // Coin economy fixture: the Hearth Lantern (3) is affordable, the Slate
+  // Roof (8) is one good day away — lets the smoke walk earn/buy/equip.
+  coins: 4, coinsEarnedToday: 1, coinsEarnedCycle: 1, coinsEarnedDay: 6,
+  ownedCosmetics: [], equippedCosmetics: {},
 };
+// Shop catalog mirror (kept tiny; the real authority is src/shared/shop.ts).
+const SHOP_PRICES = { hearth_lantern: 3, crimson_banner: 5, garden_plot: 6, slate_roof: 8, dawn_gold_trim: 12 };
+const SHOP_SLOTS = { hearth_lantern: 'light', crimson_banner: 'banner', garden_plot: 'yard', slate_roof: 'roof', dawn_gold_trim: 'roof' };
+const economyOfMock = (p) => ({
+  coins: p.coins ?? 0,
+  earnedToday: p.coinsEarnedCycle === 1 && p.coinsEarnedDay === 6 ? (p.coinsEarnedToday ?? 0) : 0,
+  dailyCap: 5,
+  owned: p.ownedCosmetics ?? [],
+  equipped: p.equippedCosmetics ?? {},
+});
 const CRISIS = {
   id: 'first_light', title: 'First Light',
   narrative: 'The generators cough back to life. Survivors gather at the wall, waiting to be told what this city will become.',
@@ -172,9 +186,17 @@ const currentInit = () => ({
   yourActionsToday: mockActions,
   marked: mockMarked,
   pledge: mockPledge,
+  economy: economyOfMock(mockPlayer),
   houses: currentHouses(),
   ...(process.env.MOCK_CAMP ? { build: CAMP_BUILD, houses: CAMP_HOUSES, yourActionsToday: {} } : {}),
 });
+// One accepted mock contribution: +1 Coin up to the cap, mirrored statefully.
+const mockEarnCoin = () => {
+  const earned = mockPlayer.coinsEarnedToday ?? 0;
+  const gained = earned < 5 ? 1 : 0;
+  mockPlayer = { ...mockPlayer, coins: (mockPlayer.coins ?? 0) + gained, coinsEarnedToday: earned + gained };
+  return gained;
+};
 const readBody = (req) => new Promise((r) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); });
 const mockApi = () => ({
   name: 'mock-devvit-api',
@@ -198,13 +220,33 @@ const mockApi = () => ({
         const acts = b.action === 'build_city' ? { grow_food: 1, build_city: 1 } : { grow_food: 1, guard_wall: 1 };
         mockActions = acts;
         mockPlayer = { ...mockPlayer, energyUsedToday: 2 };
-        return send(res, { type: 'action', player: mockPlayer, effectiveEnergy: 3, yourActionsToday: acts, unlockedTitle: null });
+        const gained = mockEarnCoin();
+        return send(res, { type: 'action', player: mockPlayer, effectiveEnergy: 3, yourActionsToday: acts, unlockedTitle: null, coinsGained: gained, economy: economyOfMock(mockPlayer) });
       }
       if (path === '/api/vote') {
         mockHasHouse = true;
         mockCrisisVotes = { a: 13, b: 7, c: 5 };
         mockCrisisVote = 'a';
-        return send(res, { type: 'vote', crisisVotes: mockCrisisVotes, yourCrisisVote: mockCrisisVote });
+        const gained = mockEarnCoin();
+        return send(res, { type: 'vote', crisisVotes: mockCrisisVotes, yourCrisisVote: mockCrisisVote, coinsGained: gained, economy: economyOfMock(mockPlayer) });
+      }
+      if (path === '/api/shop/purchase') {
+        const b = await readBody(req);
+        const price = SHOP_PRICES[b.itemId];
+        if (price === undefined) return send(res, { status: 'error', message: 'Unknown item' }, 400);
+        const owned = mockPlayer.ownedCosmetics ?? [];
+        if (owned.includes(b.itemId)) return send(res, { status: 'error', message: 'Already owned.' }, 409);
+        if ((mockPlayer.coins ?? 0) < price) return send(res, { status: 'error', message: 'Not enough Coins.' }, 400);
+        mockPlayer = { ...mockPlayer, coins: mockPlayer.coins - price, ownedCosmetics: [...owned, b.itemId] };
+        return send(res, { type: 'shop-purchase', itemId: b.itemId, economy: economyOfMock(mockPlayer), message: `purchased. ${mockPlayer.coins} Coins remain.` });
+      }
+      if (path === '/api/shop/equip') {
+        const b = await readBody(req);
+        const slot = SHOP_SLOTS[b.itemId];
+        if (!slot) return send(res, { status: 'error', message: 'Unknown item' }, 400);
+        if (!(mockPlayer.ownedCosmetics ?? []).includes(b.itemId)) return send(res, { status: 'error', message: 'You do not own that yet.' }, 400);
+        mockPlayer = { ...mockPlayer, equippedCosmetics: { ...(mockPlayer.equippedCosmetics ?? {}), [slot]: b.itemId } };
+        return send(res, { type: 'shop-equip', itemId: b.itemId, economy: economyOfMock(mockPlayer), message: 'equipped.' });
       }
       if (path === '/api/rekindle') {
         mockPlayer = { ...mockPlayer, streak: 12, lapsedStreak: 0 };
@@ -214,13 +256,15 @@ const mockApi = () => ({
         mockHasHouse = true;
         mockMarked = { ...MARKED, pledged: 26 };
         mockPledge = { ...PLEDGE, usedToday: true };
-        return send(res, { type: 'pledge', marked: mockMarked, pledge: mockPledge, player: mockPlayer });
+        const gained = mockEarnCoin();
+        return send(res, { type: 'pledge', marked: mockMarked, pledge: mockPledge, player: mockPlayer, coinsGained: gained, economy: economyOfMock(mockPlayer) });
       }
       if (path === '/api/strategy') {
         mockHasHouse = true;
         mockStrategyVotes = { prepare_raid: 10, stockpile_food: 6, repair_power: 4 };
         mockStrategyVote = 'prepare_raid';
-        return send(res, { type: 'strategy', strategyVotes: mockStrategyVotes, yourStrategyVote: mockStrategyVote });
+        const gained = mockEarnCoin();
+        return send(res, { type: 'strategy', strategyVotes: mockStrategyVotes, yourStrategyVote: mockStrategyVote, coinsGained: gained, economy: economyOfMock(mockPlayer) });
       }
       if (path === '/api/role') { const b = await readBody(req); mockPlayer = { ...mockPlayer, role: b.role ?? 'guard', roleChangedDay: 6 }; return send(res, { type: 'role', player: mockPlayer }); }
       if (path === '/api/avatar' && process.env.MOCK_AVATAR_FAIL) return send(res, { status: 'error', message: 'mock avatar failure' }, 503);

@@ -3,7 +3,11 @@ import type {
 } from '../../shared/types';
 import { isPledgeKind, type PledgerEntry } from '../game/pledges';
 import { isChallenge, type Challenge } from '../../shared/challenges';
-import { normalizeEconomyFields } from '../../shared/shop';
+import {
+  landExpansionState,
+  normalizeEconomyFields,
+  type LandExpansionState,
+} from '../../shared/shop';
 import { KEYS } from './redisKeys';
 
 /** The subset of the Devvit redis client the store uses. Tests provide a fake. */
@@ -402,6 +406,17 @@ export class Store {
     });
     const idx = rows.findIndex((r) => r.member === userId);
     return idx === -1 ? null : idx + 1;
+  }
+
+  // ----- connected community land -----
+  async getLandExpansionState(): Promise<LandExpansionState> {
+    const raw = await this.redis.hGetAll(KEYS.landFunding);
+    const funding: Record<string, unknown> = {};
+    for (const [projectId, value] of Object.entries(raw)) {
+      const amount = Number(value);
+      funding[projectId] = Number.isSafeInteger(amount) && amount >= 0 ? amount : 0;
+    }
+    return landExpansionState(funding);
   }
 
   // ----- personal houses -----

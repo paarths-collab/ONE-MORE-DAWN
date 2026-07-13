@@ -368,6 +368,7 @@ api.get('/init', async (c) => {
     pledgers,
     markedOutcome,
     contributionRank,
+    land,
   ] = await Promise.all([
     store.getVoteTally(city.day),
     store.getVoterChoice(city.day, user.userId),
@@ -386,6 +387,7 @@ api.get('/init', async (c) => {
     store.getPledgers(city.day),
     store.getMarkedOutcome(city.day - 1),
     store.getContributionRank(user.userId),
+    store.getLandExpansionState(),
   ]);
   const yesterdayActions = allYesterdayActions[user.userId] ?? {};
 
@@ -486,6 +488,7 @@ api.get('/init', async (c) => {
     cityName: cityNameFromSeed(city.worldSeed),
     challenge,
     economy: economyOf(player, city.cycle, city.day),
+    land,
     city,
     player,
     effectiveEnergy: effectiveEnergy(player, city.day),

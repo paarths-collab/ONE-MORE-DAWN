@@ -18,6 +18,29 @@ export type ShopItem = {
   description: string;
 };
 
+export type LandExpansionId = 'outer_fields' | 'river_ward' | 'high_keep';
+
+export type LandExpansionProject = {
+  id: LandExpansionId;
+  name: string;
+  description: string;
+  target: number;
+  requires: LandExpansionId | null;
+};
+
+export type LandExpansionProgress = LandExpansionProject & {
+  funded: number;
+  remaining: number;
+  unlocked: boolean;
+  available: boolean;
+};
+
+export type LandExpansionState = {
+  projects: LandExpansionProgress[];
+  activeProjectId: LandExpansionId | null;
+  unlocked: LandExpansionId[];
+};
+
 export type EconomyState = {
   coins: number;
   earnedToday: number;
@@ -86,6 +109,30 @@ export const SHOP_CATALOG: readonly ShopItem[] = [
   },
 ];
 
+export const LAND_EXPANSIONS: readonly LandExpansionProject[] = [
+  {
+    id: 'outer_fields',
+    name: 'Outer Fields',
+    description: 'Open connected farmland, roads, and new house plots.',
+    target: 120,
+    requires: null,
+  },
+  {
+    id: 'river_ward',
+    name: 'River Ward',
+    description: 'Extend the city along the river with room for trade and homes.',
+    target: 260,
+    requires: 'outer_fields',
+  },
+  {
+    id: 'high_keep',
+    name: 'High Keep',
+    description: 'Claim the connected hill for walls and civic landmarks.',
+    target: 450,
+    requires: 'river_ward',
+  },
+];
+
 const COSMETIC_SLOTS: readonly CosmeticSlot[] = ['roof', 'banner', 'light', 'yard'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -99,6 +146,37 @@ export const shopItem = (id: string): ShopItem | undefined =>
 
 export const isShopItemId = (id: unknown): id is ShopItemId =>
   typeof id === 'string' && shopItem(id) !== undefined;
+
+export const landExpansion = (id: string): LandExpansionProject | undefined =>
+  LAND_EXPANSIONS.find((project) => project.id === id);
+
+export const isLandExpansionId = (id: unknown): id is LandExpansionId =>
+  typeof id === 'string' && landExpansion(id) !== undefined;
+
+export const landExpansionState = (
+  rawFunding: Record<string, unknown>,
+): LandExpansionState => {
+  const projects: LandExpansionProgress[] = [];
+  const unlocked: LandExpansionId[] = [];
+  let activeProjectId: LandExpansionId | null = null;
+  for (const project of LAND_EXPANSIONS) {
+    const prerequisiteMet = project.requires === null || unlocked.includes(project.requires);
+    const raw = rawFunding[project.id];
+    const funded = Math.min(project.target, nonNegativeInteger(raw));
+    const projectUnlocked = prerequisiteMet && funded >= project.target;
+    const available = prerequisiteMet && !projectUnlocked && activeProjectId === null;
+    if (projectUnlocked) unlocked.push(project.id);
+    if (available) activeProjectId = project.id;
+    projects.push({
+      ...project,
+      funded,
+      remaining: project.target - funded,
+      unlocked: projectUnlocked,
+      available,
+    });
+  }
+  return { projects, activeProjectId, unlocked };
+};
 
 const normalizeOwned = (value: unknown): ShopItemId[] => {
   if (!Array.isArray(value)) return [];

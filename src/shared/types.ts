@@ -1,5 +1,11 @@
 import type { HouseTier } from './houses';
-import type { CosmeticSlot, EconomyState, ShopItemId } from './shop';
+import type {
+  CosmeticSlot,
+  EconomyState,
+  LandExpansionId,
+  LandExpansionState,
+  ShopItemId,
+} from './shop';
 
 // ---------- Core enums ----------
 
@@ -237,6 +243,8 @@ export type InitResponse = {
   };
   /** Coin balance + owned/equipped cosmetics — server-authoritative. */
   economy: EconomyState;
+  /** Community-funded, sequential districts on the connected mainland. */
+  land: LandExpansionState;
   city: CityState;
   player: PlayerProfile;
   effectiveEnergy: number; // dailyEnergy minus injury penalty; derived, never stored
@@ -400,6 +408,17 @@ export type ShopEquipResponse = {
   type: 'shop-equip';
   itemId: ShopItemId;
   economy: EconomyState;
+  message: string;
+};
+
+export type LandDonationRequest = { projectId: LandExpansionId; amount: number };
+export type LandDonationResponse = {
+  type: 'land-donation';
+  projectId: LandExpansionId;
+  donated: number;
+  unlocked: boolean;
+  economy: EconomyState;
+  land: LandExpansionState;
   message: string;
 };
 
