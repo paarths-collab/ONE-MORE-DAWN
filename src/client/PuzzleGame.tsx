@@ -433,7 +433,7 @@ export function PuzzleGame(props: {
         <button type="button" className="pz-btn" onClick={onReset} disabled={won} aria-label="Reset board">
           RESET
         </button>
-        <button type="button" className="pz-btn hint" onClick={onHint} disabled={won} aria-label="Hint: rotate a tile toward its solution">
+        <button type="button" className="pz-btn pz-hint" onClick={onHint} disabled={won} aria-label="Hint: rotate a tile toward its solution">
           HINT
         </button>
         <button type="button" className="pz-btn exit" onClick={onExit} aria-label="Exit puzzle">
