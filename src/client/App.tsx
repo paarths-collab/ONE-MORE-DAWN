@@ -306,7 +306,10 @@ const PLAN_LABELS: Record<string, string> = {
   send_scouts: '🧭 Send Scouts',
   treat_sick: '⛑️ Treat the Sick',
 };
-const STRATEGY_IDS: StrategyPlanId[] = ['stockpile_food', 'repair_power', 'prepare_raid', 'send_scouts', 'treat_sick'];
+// send_scouts is omitted in V1: it only earns council-unity via mission runs,
+// and expeditions are disabled this version, so offering it as a ballot option
+// would be a trap (it could win the vote yet never grant its unity morale).
+const STRATEGY_IDS: StrategyPlanId[] = ['stockpile_food', 'repair_power', 'prepare_raid', 'treat_sick'];
 const PLEDGE_KINDS: PledgeKind[] = ['stand_vigil', 'share_rations', 'run_messages', 'back_council'];
 const ACTION_IDS: ActionType[] = ['grow_food', 'repair_power', 'treat_sick', 'guard_wall'];
 const MARKED_ICONS: Record<Marked['kind'], string> = { person: '🧒', place: '🏚️', symbol: '🕯️' };

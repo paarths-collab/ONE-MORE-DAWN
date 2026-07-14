@@ -91,6 +91,13 @@ export const BALANCE = {
 
   // contribution scoring (leaderboard + faction rep later)
   contributionPerAction: 10,
+  // A daily streak now PAYS. Every `step` consecutive days adds `perStep` bonus
+  // standing to each accepted action, capped at `cap` (a +50% ceiling on the
+  // base 10, reached at a 15-day flame). Personal-ledger only (standing +
+  // leaderboard) — it never touches a city vital, so it cannot perturb the
+  // resolve / raid / Marked balance. Turns the streak from a pure cost (rekindle
+  // only ever spent standing) into a reason to keep the flame lit.
+  streakReward: { step: 3, perStep: 1, cap: 5 },
   // Streak insurance: restore a dead streak by burning standing. Cost scales
   // with the streak being saved, so long flames are precious, not free.
   rekindle: { minStreak: 3, costPerDay: 2 },
