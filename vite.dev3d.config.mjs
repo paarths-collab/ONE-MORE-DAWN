@@ -83,7 +83,12 @@ const LAND_DEFS = [
   { id: 'river_ward', name: 'River Ward', description: 'Extend the city along the river with room for trade and homes.', target: 260, requires: 'outer_fields' },
   { id: 'high_keep', name: 'High Keep', description: 'Claim the connected hill for walls and civic landmarks.', target: 450, requires: 'river_ward' },
 ];
-let mockLandFunding = { outer_fields: 115, river_ward: 0, high_keep: 0 };
+// MOCK_SHOWCASE (recording): outer_fields already claimed so the city boots
+// visibly expanded, and river_ward sits 5 short so a single on-camera pledge
+// unlocks the next district live.
+let mockLandFunding = process.env.MOCK_SHOWCASE
+  ? { outer_fields: 120, river_ward: 255, high_keep: 0 }
+  : { outer_fields: 115, river_ward: 0, high_keep: 0 };
 const landOfMock = () => {
   const unlocked = [];
   const projects = LAND_DEFS.map((d) => {
@@ -148,6 +153,24 @@ const INIT = {
     named: [{ username: 'ashen_fox', index: 0, tier: 4 }, { username: 'saltcedar', index: 1, tier: 3 }],
   },
 };
+// MOCK_SHOWCASE fixtures: a built-up township for the establishing pan (calm
+// by default so the city reads as worth saving); MOCK_SHOWCASE_RAID additionally
+// arms the Red Signal so the raid-warning shot (red RAID WATCH + raid music
+// track + warning cue) can be captured. Dev-harness only — the Devvit
+// production build (vite.config.ts + the real server) never sees these flags.
+const SHOWCASE_RAID = !!process.env.MOCK_SHOWCASE_RAID;
+const SHOWCASE_CITY = {
+  ...CITY,
+  cityLevel: 3, buildProgress: 18, unlockedBuildings: ['shelter', 'farm', 'watchtower'],
+  population: 168, food: 240, power: 82, morale: 61,
+  threat: SHOWCASE_RAID ? 96 : 48,
+};
+const SHOWCASE_BUILD = {
+  stage: 3, stageLabel: 'Township', unlocked: ['shelter', 'farm', 'watchtower'],
+  next: { id: 'storehouse', name: 'Storehouse', description: 'Stockpiles carry the city through lean days.', progressRequired: 45, effect: 'food buffer at dawn' },
+  progress: 20, progressRequired: 45, contributorsToday: 11, youBuiltToday: false,
+};
+const SHOWCASE_FORECAST = { ...INIT.forecast, threat: SHOWCASE_RAID ? 98 : 52, raidLikely: SHOWCASE_RAID };
 const WORLD = {
   type: 'world', totalCities: 6, yourRank: 2, eligible: true, subscribers: 1200, minSubscribers: 500,
   cities: [
@@ -172,7 +195,16 @@ const PLAYER_V = { ...PLAYER, role: process.env.MOCK_ROLE_NULL ? null : PLAYER.r
 // Stateful like the vote/strategy mocks: after /rekindle, later /init polls
 // must reflect the restored streak (the real server persists it under lock).
 // Without this, a slow post-rekindle refresh resurrects the rekindle offer.
-let mockPlayer = PLAYER_V;
+let mockPlayer = process.env.MOCK_SHOWCASE
+  ? {
+      ...PLAYER_V,
+      coins: 12, coinsEarnedToday: 3, coinsEarnedCycle: 1, coinsEarnedDay: CITY.day,
+      // A house already decorated (banner + garden + slate roof) with the
+      // Hearth Lantern and Dawn-Gold Trim left to buy and equip live on camera.
+      ownedCosmetics: ['crimson_banner', 'garden_plot', 'slate_roof'],
+      equippedCosmetics: { banner: 'crimson_banner', yard: 'garden_plot', roof: 'slate_roof' },
+    }
+  : PLAYER_V;
 const CAMP_BUILD = {
   stage: 0, stageLabel: 'Camp', unlocked: [],
   next: { id: 'shelter', name: 'Shelter', description: 'Tents become homes, fewer are lost to the cold.', progressRequired: 24, effect: '+1 morale/day' },
@@ -197,8 +229,9 @@ let mockMutationDone = false;
 const currentHouses = () => (mockHasHouse ? INIT.houses : NO_HOUSE);
 const currentInit = () => ({
   ...INIT,
+  ...(process.env.MOCK_SHOWCASE ? { build: SHOWCASE_BUILD, forecast: SHOWCASE_FORECAST, raidInDays: SHOWCASE_RAID ? 1 : 6 } : {}),
   player: mockPlayer,
-  city: CITY_V,
+  city: process.env.MOCK_SHOWCASE ? { ...SHOWCASE_CITY, status: CITY_V.status } : CITY_V,
   crisisVotes: mockCrisisVotes,
   yourCrisisVote: mockCrisisVote,
   strategyVotes: mockStrategyVotes,
