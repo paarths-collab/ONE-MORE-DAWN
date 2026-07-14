@@ -183,6 +183,7 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 .puzzle-card:disabled { opacity: 0.6; cursor: default; }
 .pc-icon { font-size: 22px; }
 .pc-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.pc-badge { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-family: var(--pixel); font-size: 7px; letter-spacing: 0.6px; color: #ffd25b; background: rgba(255, 199, 64, 0.12); border: 1px solid rgba(255, 199, 64, 0.36); border-radius: 999px; padding: 2px 7px 1px; margin-bottom: 2px; }
 .pc-title { font-family: var(--pixel); font-size: 11px; letter-spacing: 0.5px; color: #7ff0ff; }
 .pc-sub { font-family: var(--mono); font-size: 8.5px; color: var(--mut); }
 .pc-cta { font-family: var(--pixel); font-size: 11px; color: #06222a; background: linear-gradient(180deg, #7ff0ff, #33c6e6); border-radius: 7px; padding: 6px 12px; white-space: nowrap; }

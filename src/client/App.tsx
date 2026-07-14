@@ -2020,6 +2020,7 @@ function CityDashboard({
             <button type="button" className="puzzle-card" onClick={onOpenPuzzle} disabled={puzzleBusy}>
               <span className="pc-icon">🔌</span>
               <span className="pc-body">
+                <span className="pc-badge">🎯 DAILY CHALLENGE</span>
                 <span className="pc-title">RECONNECT THE CITY</span>
                 <span className="pc-sub">today’s district puzzle · rotate the grid, light it back up</span>
               </span>
