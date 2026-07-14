@@ -13,6 +13,7 @@ import {
   ApiFailure,
   getInit,
   getLeaderboard,
+  getPuzzle,
   getWorld,
   postAction,
   postAvatar,
@@ -25,7 +26,9 @@ import {
   postStrategy,
   postTreasuryInvest,
   postVote,
+  solvePuzzle,
 } from './api';
+import { PuzzleGame } from './PuzzleGame';
 import { isLocalHarnessHost, raidNoteFromEvents, raidOutcomeFromTimeline, worldUnavailableMessage } from './liveUi';
 import { BALANCE } from '../shared/balance';
 import { cityEpithet } from '../shared/cityName';
@@ -52,6 +55,7 @@ import type {
   HouseSummary,
   DawnReport,
   InitResponse,
+  PuzzleDailyResponse,
   RaidFireball,
   ReconstructionState,
   LeaderboardEntry,
@@ -1777,6 +1781,8 @@ function CityDashboard({
   coachActive,
   reconstruction,
   dome,
+  onOpenPuzzle,
+  puzzleBusy,
   economy,
   landState,
   treasury,
@@ -1818,6 +1824,8 @@ function CityDashboard({
   coachActive: boolean;
   reconstruction: ReconstructionState;
   dome: DomeState;
+  onOpenPuzzle: () => void;
+  puzzleBusy: boolean;
   economy: EconomyState;
   landState: LandExpansionState;
   treasury: TreasuryState;
@@ -1899,6 +1907,14 @@ function CityDashboard({
 
         {tab === 'city' && (
           <>
+            <button type="button" className="puzzle-card" onClick={onOpenPuzzle} disabled={puzzleBusy}>
+              <span className="pc-icon">🔌</span>
+              <span className="pc-body">
+                <span className="pc-title">RECONNECT THE CITY</span>
+                <span className="pc-sub">today’s district puzzle · rotate the grid, light it back up</span>
+              </span>
+              <span className="pc-cta">{puzzleBusy ? '…' : 'PLAY'}</span>
+            </button>
             <DomeHud dome={dome} />
             {reconstruction.active && (
               <ReconstructionPanel reconstruction={reconstruction} onAddLabor={onAddLabor} disabled={buildCtaDisabled} />
@@ -2907,6 +2923,11 @@ export function App() {
   const [liveCityName, setLiveCityName] = useState<string | null>(null); // this city's ancient name (per-subreddit)
   const [livePostId, setLivePostId] = useState<string | null>(null);
   const [liveChallenge, setLiveChallenge] = useState<InitResponse['challenge'] | null>(null); // today's personal mission
+  // Reconnect the City — the daily tile-rotation puzzle (fetched on open).
+  const [puzzleOpen, setPuzzleOpen] = useState(false);
+  const [puzzleData, setPuzzleData] = useState<PuzzleDailyResponse | null>(null);
+  const [puzzleBusy, setPuzzleBusy] = useState(false);
+  const [puzzleBanner, setPuzzleBanner] = useState<string | null>(null);
   // Coin economy: balance + cosmetics from the server, land districts shared city-wide.
   const [liveEconomy, setLiveEconomy] = useState<EconomyState | null>(null);
   const [liveLand, setLiveLand] = useState<LandExpansionState | null>(null);
@@ -3846,6 +3867,45 @@ export function App() {
     [popFloat, pushNotif, pushEvent],
   );
 
+  // RECONNECT THE CITY — open the daily puzzle (fetch today's board, then mount
+  // the self-contained <PuzzleGame> overlay). Works in demo (mock) + live.
+  const openPuzzle = useCallback(() => {
+    if (puzzleBusy) return;
+    setPuzzleBusy(true);
+    setPuzzleBanner(null);
+    getPuzzle()
+      .then((d) => {
+        setPuzzleData(d);
+        setPuzzleOpen(true);
+      })
+      .catch(() => pushNotif('🔌', "today's puzzle is offline, try again", 'bad'))
+      .finally(() => setPuzzleBusy(false));
+  }, [puzzleBusy, pushNotif]);
+
+  // The board solved: submit the final rotations for server validation + scoring,
+  // then surface the reward + refresh the teaser (best/rank) for next time.
+  const onPuzzleSolved = useCallback(
+    (result: { stars: 0 | 1 | 2 | 3; moves: number; timeMs: number; rotations: number[] }) => {
+      const data = puzzleData;
+      if (!data) return;
+      const stars = '★'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
+      solvePuzzle({ levelId: data.levelId, rotations: result.rotations, moves: result.moves, timeMs: result.timeMs })
+        .then((res) => {
+          if (res.reward) {
+            showEpic('THE DISTRICT IS CONNECTED', res.reward);
+            pushNotif('🔌', res.reward, 'good');
+            pushEvent('🔌', `You reconnected the district in ${result.moves} moves. ${res.reward}.`);
+          }
+          setPuzzleBanner(`${stars} · reconnected in ${result.moves} moves${res.reward ? '' : ' · already claimed today'}`);
+          getPuzzle().then(setPuzzleData).catch(() => {});
+        })
+        .catch(() => {
+          setPuzzleBanner(`${stars} · reconnected in ${result.moves} moves`);
+        });
+    },
+    [puzzleData, showEpic, pushNotif, pushEvent],
+  );
+
   // ADD LABOR, the shared "build from zero" contribution. Live: post the
   // energy-gated once/day build_city action, then re-fetch to pull the fresh
   // community progress. Demo: advance the local meter and unlock buildings on
@@ -4775,6 +4835,8 @@ export function App() {
       <CityDashboard
         open={dashOpen}
         setOpen={setDashboardOpen}
+        onOpenPuzzle={openPuzzle}
+        puzzleBusy={puzzleBusy}
         tab={dashTab}
         setTab={setDashboardTab}
         mapView={mapView}
@@ -5015,6 +5077,23 @@ export function App() {
         />
       )}
       {showOnboard && <Onboarding busy={onboardBusy} defaultName={liveUsername} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
+      {puzzleOpen && puzzleData && (
+        <div className="puzzle-overlay">
+          <div className="puzzle-shell">
+            <div className="puzzle-topbar">
+              <span className="puzzle-daily">🔌 DAILY PUZZLE · {puzzleData.solvedCount} solved{puzzleData.bestMoves != null ? ` · best ${puzzleData.bestMoves}` : ''}</span>
+              <button type="button" className="puzzle-x" onClick={() => setPuzzleOpen(false)}>✕</button>
+            </div>
+            <PuzzleGame level={puzzleData.level} onSolved={onPuzzleSolved} onExit={() => setPuzzleOpen(false)} />
+            {puzzleBanner && (
+              <div className="puzzle-result">
+                <div className="pr-line">{puzzleBanner}</div>
+                <div className="pr-share">“I reconnected the district — can you beat it?”</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {showFallen && (
         <FallenScreen
           epitaph={fallenEpitaph}
