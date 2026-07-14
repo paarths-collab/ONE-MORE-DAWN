@@ -66,7 +66,7 @@ node tools/showcase-smoke.mjs
 | 30–36s | Fly camera to your house | The lantern now glows on your actual house | Pan/zoom to your highlighted house |
 | 36–46s | SHOP → EXPAND → pledge to River Ward | Fund bar 255→260, **THE CITY GROWS** banner, new terrain band appears | EXPAND → MAX → PLEDGE 🪙 → watch the district unlock |
 | 46–52s | Crisis vote + council + The Marked | Reddit-scale collective decisions, community % | LIVE tab → vote, back a plan, pledge for Mira |
-| 52–58s | Raid warning → Dawn Report | Return-at-dawn consequence loop | (Use Clip B for the red RAID WATCH; open the Dawn Report teaser) |
+| 52–58s | Raid warning → the wall decides | Red RAID WATCH, then the full attack: night falls, ⚔ RAID AT THE GATE, WALL HELD / BREACHED | Clip B (`MOCK_SHOWCASE_RAID=1`) for the warning; **in the demo-mode harness** (plain, no `MOCK_API`) run `window.__omdDemo.raidNow()` in the console to fire the full 9s attack live on camera (raiders storm the gate, then the wall holds if DEFENSE ≥ 40 else breaches with −8 souls) |
 | 58–65s | WORLD view — two subreddit-cities | Multiple subreddits, one city each, ranked | MAP → WORLD |
 
 ## Editing checklist

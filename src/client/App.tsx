@@ -4206,7 +4206,8 @@ export function App() {
     (window as unknown as Record<string, unknown>).__omdDemo = {
       raidNow: () => {
         raidDaysRef.current = 0;
-        setRaidDays(0); // next countdown tick fires the raid
+        setRaidDays(0);
+        startRaid(); // fire the attack immediately (demo / recording)
       },
       build: () => toggleBuild(),
       sayHi: () => onSayHi(),
@@ -4227,7 +4228,7 @@ export function App() {
     return () => {
       delete (window as unknown as Record<string, unknown>).__omdDemo;
     };
-  }, [toggleBuild, onSayHi, onVillager, runAction, runScavenge, simTick, simBuyHouse]);
+  }, [toggleBuild, onSayHi, onVillager, runAction, runScavenge, simTick, simBuyHouse, startRaid]);
 
   // YOUR CITY's world-map status reflects live vitals + raid state.
   const worldYouStatus: WorldStatus =
