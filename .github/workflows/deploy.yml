@@ -32,6 +32,12 @@ jobs:
           npm test
           npm run build
 
+      # ubuntu-latest ships Google Chrome; the smoke harness honors CHROME_PATH.
+      - name: Client smoke (headless Chrome)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run test:client
+
       - name: Upload to Devvit
         env:
           DEVVIT_TOKEN: ${{ secrets.DEVVIT_TOKEN }}
