@@ -537,6 +537,12 @@ async function liveSmoke(url) {
     }
 
     await cdp.clickButton('LIVE');
+    const liveSectionOrder = await cdp.eval(`[...document.querySelectorAll('.dash.on .p-sec')].map((el) => (el.textContent || '').trim())`);
+    const crisisIndex = liveSectionOrder.indexOf("TODAY'S CRISIS");
+    const councilIndex = liveSectionOrder.indexOf('THE COUNCIL');
+    const discussionIndex = liveSectionOrder.indexOf('REDDIT DISCUSSION');
+    assert(crisisIndex >= 0 && councilIndex > crisisIndex, `LIVE should put crisis before council, saw ${JSON.stringify(liveSectionOrder)}.`);
+    assert(discussionIndex > councilIndex, `LIVE should put required decisions before Reddit discussion, saw ${JSON.stringify(liveSectionOrder)}.`);
     await cdp.clickButtonContaining('Prepare for Raid');
     await cdp.waitFor('[...document.querySelectorAll("button.co-plan")].some((b) => b.disabled && (b.textContent || "").includes("Prepare for Raid"))', 'council strategy lock after submit');
     await cdp.waitFor('document.body.innerText.includes("of the council backs it")', 'strategy confirmation reports community support');
@@ -555,6 +561,19 @@ async function liveSmoke(url) {
     // vote/pledge/action flow above if placed earlier.
     await cdp.clickButton('CITY');
     await cdp.waitFor('!!document.querySelector(".build-panel")', 'build panel renders');
+    const cityOrder = await cdp.eval(`(() => {
+      const build = document.querySelector('.build-panel');
+      const dome = document.querySelector('.dome-panel');
+      const puzzle = document.querySelector('.puzzle-card');
+      const before = (a, b) => !!a && !!b && !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return {
+        buildBeforeDome: before(build, dome),
+        domeBeforePuzzle: before(dome, puzzle),
+        puzzleBadge: document.querySelector('.pc-badge')?.textContent || '',
+      };
+    })()`);
+    assert(cityOrder.buildBeforeDome && cityOrder.domeBeforePuzzle, `CITY should prioritize Build, then Dome, then the optional puzzle, saw ${JSON.stringify(cityOrder)}.`);
+    assert(cityOrder.puzzleBadge.includes('DAILY PUZZLE') && !cityOrder.puzzleBadge.includes('DAILY CHALLENGE'), `Puzzle badge must use unambiguous DAILY PUZZLE wording, saw "${cityOrder.puzzleBadge}".`);
     const buildPanel = await cdp.eval(`(() => {
       const cta = document.querySelector('.bp-cta');
       return {
@@ -604,6 +623,9 @@ async function liveSmoke(url) {
     })()`);
     assert(frontierBefore.mainland && frontierBefore.roads && frontierBefore.forestCount > 200 && frontierBefore.scrubCount >= 200, `Mainland should have rolling terrain detail, roads, forest, and scrub, saw ${JSON.stringify(frontierBefore)}.`);
     assert(frontierBefore.frontier && !frontierBefore.developed, `Locked land should be visible wilderness on one mainland, saw ${JSON.stringify(frontierBefore)}.`);
+    await cdp.eval(`document.querySelector('.treasury-invest')?.click()`);
+    await cdp.waitFor(`(document.querySelector('.treasury-invest')?.textContent || '').includes('CONFIRM 5')`, 'treasury investment asks for confirmation');
+    assert(await cdp.eval(`document.body.innerText.includes('CITY TREASURY') && document.body.innerText.includes('5 🪙')`), 'First treasury click must not spend pooled Coins.');
     await cdp.eval(`document.querySelector('.treasury-invest')?.click()`);
     await cdp.waitFor(`document.body.innerText.includes('Outer Fields unlocked with the village treasury')`, 'the collective treasury unlocks the district');
     await cdp.waitFor(`[...document.querySelectorAll('.land-row')].some((r) => r.textContent.includes('Outer Fields') && r.textContent.includes('OPEN'))`, 'the funded district shows as open village land');
@@ -690,11 +712,13 @@ async function landscapeLayoutSmoke(url) {
         intersections,
         overflowX: document.body.scrollWidth > document.documentElement.clientWidth,
         actionHeights: [...document.querySelectorAll('.act')].filter(visible).map((el) => el.getBoundingClientRect().height),
+        actionLabels: [...document.querySelectorAll('.act .al')].map((el) => ({ text: (el.textContent || '').trim(), visible: visible(el) })),
       };
     })()`);
     assert(layout.intersections.length === 0, `Landscape global controls must not overlap the CITY drawer: ${JSON.stringify(layout.intersections)}`);
     assert(!layout.overflowX, 'Landscape viewport should not overflow horizontally.');
     assert(layout.actionHeights.every((height) => height >= 44), `Landscape action buttons need 44px touch height, saw ${layout.actionHeights.join(', ')}.`);
+    assert(layout.actionLabels.length > 0 && layout.actionLabels.every((label) => label.visible && label.text.length > 0), `Landscape actions need visible touch labels, saw ${JSON.stringify(layout.actionLabels)}.`);
   } finally {
     await close();
   }
