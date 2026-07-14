@@ -150,6 +150,11 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 .bp-built { font-family: var(--mono); font-size: 8.5px; color: var(--mut); line-height: 1.5; margin-bottom: 9px; }
 .bp-cta { width: 100%; font-family: var(--pixel); font-size: 8.5px; letter-spacing: 1px; color: #0c0a0a; background: linear-gradient(180deg, #f5d76e, #c99a2e); border: 1px solid #7a6120; border-radius: 10px; padding: 8px; cursor: pointer; }
 .bp-cta:disabled { opacity: 0.5; cursor: default; }
+/* Reconstruction: a raid scarred the neighborhood; the whole city rebuilds it. */
+.rebuild-panel { border-color: #a3541f; background: linear-gradient(180deg, #2a1408, transparent); }
+.rebuild-panel .bp-stage { color: #ffb45b; }
+.rebuild-panel .bp-bar i { background: linear-gradient(90deg, #e8843a, #ffb45b); }
+.rebuild-cta { background: linear-gradient(180deg, #ffb45b, #e8843a); border-color: #a3541f; }
 
 /* ---- dashboard tabs ---- */
 .dash-tabs { display: flex; width: 100%; gap: 0; margin-bottom: 12px; border: 1px solid #2f2828; border-radius: 10px; overflow: hidden; background: rgba(255, 255, 255, 0.02); }

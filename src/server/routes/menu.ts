@@ -88,6 +88,8 @@ menu.post('/reset', async (c) => {
     KEYS.lbScouts,
     KEYS.housesIndex,
     KEYS.housesMeta,
+    KEYS.housesDamage,
+    KEYS.housesRebuild,
     KEYS.landFunding,
     KEYS.markedOutcomes,
   ];

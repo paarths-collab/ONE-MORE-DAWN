@@ -76,6 +76,26 @@ const economyOfMock = (p) => ({
   owned: p.ownedCosmetics ?? [],
   equipped: p.equippedCosmetics ?? {},
 });
+// Community reconstruction mirror. Off by default so the standard build-panel
+// smoke is unaffected; MOCK_RAID_AFTERMATH=1 arms a raid-damaged neighbor home
+// (5 labor) sitting one short so a single build_city restores it on camera.
+const RECON_NEEDED = 5;
+let mockRebuildDone = process.env.MOCK_RAID_AFTERMATH ? 4 : RECON_NEEDED;
+const mockDamaged = () =>
+  mockRebuildDone < RECON_NEEDED ? [{ index: 6, username: 'ashen_fox', status: 'damaged' }] : [];
+const reconstructionOfMock = () => {
+  const active = mockRebuildDone < RECON_NEEDED;
+  return {
+    active,
+    required: active ? RECON_NEEDED : 0,
+    contributed: active ? mockRebuildDone : 0,
+    destroyed: 0,
+    damaged: active ? 1 : 0,
+    next: active
+      ? { username: 'ashen_fox', index: 6, status: 'damaged', done: mockRebuildDone, needed: RECON_NEEDED }
+      : null,
+  };
+};
 // Land districts mirror (authority: src/shared/shop.ts LAND_EXPANSIONS).
 // outer_fields sits 5 short of its target so the smoke can fund the unlock.
 const LAND_DEFS = [
@@ -208,8 +228,9 @@ const currentInit = () => ({
   pledge: mockPledge,
   economy: economyOfMock(mockPlayer),
   land: landOfMock(),
-  houses: currentHouses(),
-  ...(process.env.MOCK_CAMP ? { build: CAMP_BUILD, houses: CAMP_HOUSES, yourActionsToday: {} } : {}),
+  reconstruction: reconstructionOfMock(),
+  houses: { ...currentHouses(), damaged: mockDamaged() },
+  ...(process.env.MOCK_CAMP ? { build: CAMP_BUILD, houses: { ...CAMP_HOUSES, damaged: [] }, yourActionsToday: {} } : {}),
 });
 // One accepted mock contribution: +1 Coin up to the cap, mirrored statefully.
 const mockEarnCoin = () => {
@@ -242,7 +263,14 @@ const mockApi = () => ({
         mockActions = acts;
         mockPlayer = { ...mockPlayer, energyUsedToday: 2 };
         const gained = mockEarnCoin();
-        return send(res, { type: 'action', player: mockPlayer, effectiveEnergy: 3, yourActionsToday: acts, unlockedTitle: null, coinsGained: gained, economy: economyOfMock(mockPlayer) });
+        // build_city labor pays down the shared rebuild queue first (homes
+        // before buildings). One point restores the pre-funded damaged home.
+        let rebuilt = null;
+        if (b.action === 'build_city' && mockRebuildDone < RECON_NEEDED) {
+          mockRebuildDone += 1;
+          if (mockRebuildDone >= RECON_NEEDED) rebuilt = { username: 'ashen_fox', index: 6 };
+        }
+        return send(res, { type: 'action', player: mockPlayer, effectiveEnergy: 3, yourActionsToday: acts, unlockedTitle: null, coinsGained: gained, economy: economyOfMock(mockPlayer), reconstruction: reconstructionOfMock(), rebuilt });
       }
       if (path === '/api/vote') {
         mockHasHouse = true;

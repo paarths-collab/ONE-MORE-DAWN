@@ -49,6 +49,7 @@ import type {
   HouseSummary,
   DawnReport,
   InitResponse,
+  ReconstructionState,
   LeaderboardEntry,
   Marked,
   PledgeInfo,
@@ -211,6 +212,28 @@ const DEMO_ECONOMY: EconomyState = {
   equipped: { light: 'hearth_lantern' },
 };
 const DEMO_LAND = landExpansionState({ outer_fields: 120, river_ward: 96 });
+const EMPTY_RECONSTRUCTION: ReconstructionState = {
+  active: false, required: 0, contributed: 0, destroyed: 0, damaged: 0, next: null,
+};
+
+// Sequence the siege SFX over the ~9s cinematic: the warning bell, incoming
+// fireballs and their impacts, then the breach/collapse. Short fire-and-forget
+// cues; a stray timer after unmount just calls playSound (a safe no-op).
+function playRaidSfx(outcome: 'held' | 'breach' | 'fallen', homesLost: boolean): void {
+  playSound('siege_bell');
+  const at = (ms: number, name: 'fireball' | 'impact_hit' | 'wall_crack' | 'house_collapse' | 'dawn_report') =>
+    window.setTimeout(() => playSound(name), ms);
+  at(1400, 'fireball');
+  at(2100, 'impact_hit');
+  at(3200, 'fireball');
+  at(3900, 'impact_hit');
+  if (outcome === 'held') {
+    at(4600, 'dawn_report');
+  } else {
+    at(4700, 'wall_crack');
+    if (homesLost) at(5400, 'house_collapse');
+  }
+}
 
 // Server vitals caps (src/shared/balance.ts: food store 300, medicine 120,
 // power/morale/threat/defense 0..100). Demo keeps the old local maxes.
@@ -1513,6 +1536,50 @@ type MapViewMode = 'town' | 'world';
 // BUILD panel (CITY tab) — the shared "build from zero" progress. Framed as
 // community effort: everyone's labor pushes one meter and unlocks buildings for
 // the whole city. Never "you built X" — always "we build this city together".
+// REBUILD THE NEIGHBORHOOD (CITY tab, shown while homes are in ruins). A house
+// belongs to one Redditor, but the whole city rebuilds it — this is the shared
+// meter every player's labor pays down (destroyed homes first). Ownership is
+// never lost; a rebuilt home returns to its owner.
+function ReconstructionPanel({
+  reconstruction,
+  onAddLabor,
+  disabled,
+}: {
+  reconstruction: ReconstructionState;
+  onAddLabor: () => void;
+  disabled: boolean;
+}) {
+  const { required, contributed, destroyed, damaged, next } = reconstruction;
+  const pct = required > 0 ? Math.min(100, Math.round((contributed / required) * 100)) : 100;
+  const lost: string[] = [];
+  if (destroyed > 0) lost.push(`${destroyed} home${destroyed === 1 ? '' : 's'} destroyed`);
+  if (damaged > 0) lost.push(`${damaged} damaged`);
+  return (
+    <div className="build-panel rebuild-panel">
+      <div className="bp-head">
+        <span className="bp-stage">🏚️ REBUILD THE NEIGHBORHOOD</span>
+        <span className="bp-sub">no citizen rebuilds alone</span>
+      </div>
+      <div className="mini-cap">{lost.join(' · ') || 'homes were lost in the raid'} — the whole city restores them.</div>
+      {next && (
+        <div className="bp-next">
+          <span className="bp-nm">Rebuilding: u/{next.username}'s house</span>
+          <span className="bp-desc">{next.status === 'destroyed' ? 'burned to the foundation' : 'damaged in the raid'}</span>
+        </div>
+      )}
+      <div className="bp-bar">
+        <i style={{ width: `${pct}%` }} />
+      </div>
+      <div className="bp-meta">
+        {contributed}/{required} labor · {next ? `${next.done}/${next.needed} on this home` : 'almost there'}
+      </div>
+      <button type="button" className="bp-cta rebuild-cta" disabled={disabled} onClick={onAddLabor}>
+        🔨 CONTRIBUTE LABOR
+      </button>
+    </div>
+  );
+}
+
 function BuildPanel({
   build,
   onAddLabor,
@@ -1591,6 +1658,7 @@ function CityDashboard({
   buildCtaDisabled,
   buildCtaLabel,
   coachActive,
+  reconstruction,
   economy,
   landState,
   shopBusy,
@@ -1628,6 +1696,7 @@ function CityDashboard({
   buildCtaDisabled: boolean;
   buildCtaLabel: string;
   coachActive: boolean;
+  reconstruction: ReconstructionState;
   economy: EconomyState;
   landState: LandExpansionState;
   shopBusy: boolean;
@@ -1705,6 +1774,9 @@ function CityDashboard({
 
         {tab === 'city' && (
           <>
+            {reconstruction.active && (
+              <ReconstructionPanel reconstruction={reconstruction} onAddLabor={onAddLabor} disabled={buildCtaDisabled} />
+            )}
             {build && (
               <BuildPanel build={build} onAddLabor={onAddLabor} ctaDisabled={buildCtaDisabled} ctaLabel={buildCtaLabel} />
             )}
@@ -2712,6 +2784,7 @@ export function App() {
   // Coin economy: balance + cosmetics from the server, land districts shared city-wide.
   const [liveEconomy, setLiveEconomy] = useState<EconomyState | null>(null);
   const [liveLand, setLiveLand] = useState<LandExpansionState | null>(null);
+  const [liveReconstruction, setLiveReconstruction] = useState<ReconstructionState | null>(null);
   const [demoEconomy, setDemoEconomy] = useState<EconomyState>(() => ({
     ...DEMO_ECONOMY,
     owned: [...DEMO_ECONOMY.owned],
@@ -2786,6 +2859,7 @@ export function App() {
   const poisRef = useRef<PoiInfo[]>([]); // district directory, readable in handlers
   const contribsRef = useRef<Record<string, Contrib>>(START_CONTRIBS); // fresh reads in timers
   const liveBuildRef = useRef<BuildStatus | null>(null); // last server build state, readable in the add-labor handler
+  const liveReconstructionRef = useRef<ReconstructionState | null>(null); // readable in the add-labor handler
   const liveHousesRef = useRef<HouseSummary | null>(null); // last server house summary, for first-house feedback
   const demoUnlockedRef = useRef<string[]>([]); // demo build unlocks, readable in the handler
   const demoBuildProgressRef = useRef(0); // demo labor toward the next building
@@ -2813,7 +2887,8 @@ export function App() {
   }, [mapView]);
   useEffect(() => {
     liveBuildRef.current = liveBuild;
-  }, [liveBuild]);
+    liveReconstructionRef.current = liveReconstruction;
+  }, [liveBuild, liveReconstruction]);
 
   // ---- feed helpers ----
   const pushEvent = useCallback((icon: string, text: string) => {
@@ -2954,6 +3029,7 @@ export function App() {
       // Economy + land: state for the SHOP tab, cosmetics + districts for the scene.
       setLiveEconomy(init.economy ?? EMPTY_ECONOMY);
       setLiveLand(init.land ?? EMPTY_LAND);
+      setLiveReconstruction(init.reconstruction ?? EMPTY_RECONSTRUCTION);
       // Daily mission: track completion transitions so finishing mid-session
       // cheers exactly once (never on boot, never again on later polls).
       const ch = init.challenge ?? null;
@@ -3036,15 +3112,36 @@ export function App() {
       if (dayIncreased) {
         pushNotif('🌅', `dawn breaks, day ${city.day}`);
         pushEvent('🌅', `Dawn broke over the city, day ${city.day}, still standing.`);
-        // last night's raid, if the timeline recorded one
-        const t = init.timelinePreview;
-        const raidOutcome = raidOutcomeFromTimeline(t?.events, t?.deltas.population);
-        if (raidOutcome) {
-          const breached = raidOutcome.title === 'THE WALL WAS BREACHED';
-          showEpic(raidOutcome.title, raidOutcome.line);
-          pushNotif('⚔', raidOutcome.line, breached ? 'bad' : 'good');
-          pushEvent('⚔', raidOutcome.line);
-          playSound(breached ? 'raid_warning' : 'dawn_report');
+        // Last night's raid: the server aftermath (authoritative) drives the full
+        // siege cinematic + the sequenced SFX; older entries without it fall back
+        // to the timeline-derived banner.
+        const after = init.dawnReport?.raidAftermath ?? null;
+        if (after) {
+          const outcome: 'held' | 'breach' = after.held ? 'held' : 'breach';
+          const hitHouseIndices = (init.houses?.damaged ?? []).map((d) => d.index);
+          const fireballs = after.held ? 3 : Math.min(6, 4 + after.housesDestroyed.length);
+          handleRef.current?.playRaidCinematic?.({ outcome, fireballs, hitHouseIndices });
+          playRaidSfx(outcome, after.housesDestroyed.length > 0);
+          const title = after.held ? '🛡 THE WALL HELD' : '🔥 THE WALL WAS BREACHED';
+          const lost = after.housesDestroyed.length;
+          const sub = after.held
+            ? 'the wall held; the city stood firm'
+            : lost > 0
+              ? `${lost} home${lost === 1 ? '' : 's'} lost — no citizen rebuilds alone`
+              : 'the wall was breached; the city held the line';
+          showEpic(title, sub);
+          pushNotif('⚔', sub, after.held ? 'good' : 'bad');
+          pushEvent('⚔', sub);
+        } else {
+          const t = init.timelinePreview;
+          const raidOutcome = raidOutcomeFromTimeline(t?.events, t?.deltas.population);
+          if (raidOutcome) {
+            const breached = raidOutcome.title === 'THE WALL WAS BREACHED';
+            showEpic(raidOutcome.title, raidOutcome.line);
+            pushNotif('⚔', raidOutcome.line, breached ? 'bad' : 'good');
+            pushEvent('⚔', raidOutcome.line);
+            playSound(breached ? 'raid_warning' : 'dawn_report');
+          }
         }
       }
     },
@@ -3550,14 +3647,25 @@ export function App() {
       if (cityFallenRef.current || mutatingRef.current) return;
       const nextName = liveBuildRef.current?.next?.name ?? 'settlement';
       mutatingRef.current = true;
+      const rebuildingNow = liveReconstructionRef.current?.active ?? false;
       postAction('build_city')
         .then(async (res) => {
           setLiveEnergy({ effective: res.effectiveEnergy, used: res.player.energyUsedToday });
           setLiveActions(res.yourActionsToday);
           setLiveEconomy(res.economy);
+          setLiveReconstruction(res.reconstruction);
           if (res.coinsGained > 0) popFloat('+1 🪙');
           playSound('action_confirm');
-          pushNotif('🔨', `you added a day's labor to the ${nextName}`, 'good');
+          if (res.rebuilt) {
+            // The whole city just restored someone's home — ownership preserved.
+            handleRef.current?.rebuildHouse?.(res.rebuilt.index);
+            playSound('rebuild_done');
+            showEpic('THE CITY REBUILT A HOME', `u/${res.rebuilt.username}'s house stands again`);
+            pushNotif('🏠', `the city rebuilt u/${res.rebuilt.username}'s home`, 'good');
+            pushEvent('🏠', `The community restored u/${res.rebuilt.username}'s house.`);
+          } else {
+            pushNotif('🔨', rebuildingNow ? 'you added labor to the rebuild' : `you added a day's labor to the ${nextName}`, 'good');
+          }
           // Mutation committed — release the single-flight guard BEFORE the
           // read-only refresh so a quick next tap is never silently swallowed
           // while /init is still in flight (slow devices hit this for real).
@@ -3696,11 +3804,18 @@ export function App() {
         { username: 'ashen_fox', index: 6, tier: 3 },
         { username: 'saltcedar', index: 14, tier: 2 },
       ],
+      damaged: [],
     };
   }, [mode, liveHouses, demoHouseTotal, demoYourContribution]);
   useEffect(() => {
     handleRef.current?.setHouses?.(houses ? { ...houses, currentUsername: liveUsername || 'you' } : null);
   }, [houses, liveUsername, loaded]);
+  // Raid ruins overlay: struck homes render as ruins with lingering smoke and
+  // keep their owner label. setHouses re-applies internally on refresh; this
+  // effect keeps the scene's damage set in sync with the server truth.
+  useEffect(() => {
+    handleRef.current?.setHouseDamage?.((houses?.damaged ?? []).map((d) => ({ index: d.index, status: d.status })));
+  }, [houses, loaded]);
 
   const economy = mode === 'live' ? (liveEconomy ?? EMPTY_ECONOMY) : mode === 'demo' ? demoEconomy : EMPTY_ECONOMY;
   const landState = mode === 'live' ? (liveLand ?? EMPTY_LAND) : mode === 'demo' ? demoLand : EMPTY_LAND;
@@ -3926,6 +4041,7 @@ export function App() {
           .then(async (res) => {
             setLiveEnergy({ effective: res.effectiveEnergy, used: res.player.energyUsedToday });
             setLiveActions(res.yourActionsToday);
+            setLiveReconstruction(res.reconstruction);
             playSound('action_confirm');
             popFloat(`+1 ${ACTION_JUICE[act] ?? '⚡'}`);
             pushNotif('✅', 'your work lands at the next dawn', 'good');
@@ -4030,6 +4146,14 @@ export function App() {
     pushNotif('⚔', 'RAID, raiders are at the gate!', 'bad');
     handleRef.current?.setRaidWatch?.(true);
     handleRef.current?.setRaiders?.(true); // raider party appears at the gate
+    // The wall decides on CURRENT defense; scale the siege cinematic to match.
+    const willHold = vitalsRef.current.DEFENSE >= 40;
+    handleRef.current?.playRaidCinematic?.({
+      outcome: willHold ? 'held' : 'breach',
+      fireballs: willHold ? 3 : 5,
+      hitHouseIndices: [],
+    });
+    playRaidSfx(willHold ? 'held' : 'breach', !willHold);
     raidTimersRef.current.push(
       window.setTimeout(() => {
         const held = vitalsRef.current.DEFENSE >= 40;
@@ -4461,6 +4585,7 @@ export function App() {
         buildCtaDisabled={buildCtaDisabled}
         buildCtaLabel={buildCtaLabel}
         coachActive={coachStep !== null}
+        reconstruction={mode === 'live' ? (liveReconstruction ?? EMPTY_RECONSTRUCTION) : EMPTY_RECONSTRUCTION}
         economy={economy}
         landState={landState}
         shopBusy={shopBusy}

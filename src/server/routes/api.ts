@@ -11,7 +11,9 @@ import type {
   AvatarRequest,
   AvatarResponse,
   CityState,
+  DamagedHouse,
   DawnReport,
+  ReconstructionState,
   FactionId,
   Forecast,
   HouseSummary,
@@ -47,6 +49,7 @@ import { buildStanding } from '../game/standing';
 import { buildVillagers, buildZones, maskName } from '../game/village';
 import { bumpRoleRep, effectiveEnergy, freshPlayer, resetPlayerForDay } from '../game/dayLogic';
 import { awardContributionCoin } from '../game/economy';
+import { damagedHouses, nextRebuildTarget, reconstructionState, type HouseRow } from '../game/reconstruction';
 import { runLazyResolution, utcDateString } from '../game/lazyResolve';
 import { resolveDay } from '../game/resolver';
 import { beginUserLock } from '../game/userLock';
@@ -111,7 +114,48 @@ const emptyHouseSummary = (): HouseSummary => ({
   founder: null,
   yours: null,
   named: [],
+  damaged: [],
 });
+
+/** Named house rows for the damaged homes only (bounded, few per raid). */
+const namedDamagedRows = async (
+  store: Store,
+  rows: { userId: string; index: number }[],
+  damage: Record<string, 'destroyed' | 'damaged'>,
+): Promise<HouseRow[]> => {
+  const hit = rows.filter((r) => damage[r.userId] === 'destroyed' || damage[r.userId] === 'damaged');
+  const players = await Promise.all(hit.map((r) => store.getPlayer(r.userId)));
+  return hit.map((r, i) => ({ ...r, username: players[i]?.username ?? 'a survivor' }));
+};
+
+/** The shared rebuild state + the damaged-house list, from one set of reads. */
+export const buildReconstruction = async (
+  store: Store,
+): Promise<{ state: ReconstructionState; damaged: DamagedHouse[]; rows: HouseRow[]; damage: Record<string, 'destroyed' | 'damaged'>; progress: Record<string, number> }> => {
+  try {
+    const [rows, damage, progress] = await Promise.all([
+      store.getHouseRows(),
+      store.getHouseDamage(),
+      store.getRebuildProgress(),
+    ]);
+    const named = await namedDamagedRows(store, rows, damage);
+    return {
+      state: reconstructionState(named, damage, progress),
+      damaged: damagedHouses(named, damage, progress),
+      rows: named,
+      damage,
+      progress,
+    };
+  } catch {
+    return {
+      state: { active: false, required: 0, contributed: 0, destroyed: 0, damaged: 0, next: null },
+      damaged: [],
+      rows: [],
+      damage: {},
+      progress: {},
+    };
+  }
+};
 
 export const buildHouseSummary = async (store: Store, userId: string): Promise<HouseSummary> => {
   try {
@@ -143,7 +187,8 @@ export const buildHouseSummary = async (store: Store, userId: string): Promise<H
       return { username: p.username, index: Math.floor(idxRaw), tier: tierForContribution(t.score) };
     }));
     const named = namedRaw.filter((h): h is NonNullable<typeof h> => h !== null);
-    return { total, cap: HOUSE_CAP, founder, yours, named };
+    const { damaged } = await buildReconstruction(store);
+    return { total, cap: HOUSE_CAP, founder, yours, named, damaged };
   } catch {
     return emptyHouseSummary();
   }
@@ -448,6 +493,9 @@ api.get('/init', async (c) => {
   // Dawn report: yesterday's story + this player's part in it. Only when a
   // timeline entry for yesterday exists (i.e. at least one resolution ran).
   const timelinePreview = timeline[0] ?? null;
+  // Shared rebuild queue: computed once, reused for the owner line + response.
+  const reconstruction = await buildReconstruction(store);
+  const myDamage = reconstruction.damage[user.userId] ?? null;
   let dawnReport: DawnReport | null = null;
   if (!brandNew && timelinePreview && timelinePreview.day === city.day - 1) {
     const yourImpact: string[] = [];
@@ -469,11 +517,17 @@ api.get('/init', async (c) => {
       );
     }
     if (yesterdayVote) yourImpact.push('You voted on the crisis.');
+    if (myDamage === 'destroyed') {
+      yourImpact.push('Your house was destroyed in the raid. The city has begun rebuilding it.');
+    } else if (myDamage === 'damaged') {
+      yourImpact.push('Your house was damaged in the raid. The city is repairing it.');
+    }
     dawnReport = {
       day: timelinePreview.day,
       citySummary: timelinePreview.events.slice(0, 5),
       yourImpact,
       title: player.title,
+      raidAftermath: timelinePreview.raidAftermath ?? null,
     };
   }
 
@@ -524,6 +578,7 @@ api.get('/init', async (c) => {
       (yourActionsToday['build_city'] ?? 0) > 0,
     ),
     houses,
+    reconstruction: reconstruction.state,
     marked,
     pledge,
     drama,
@@ -612,10 +667,16 @@ api.post('/action', async (c) => {
     return c.json<ApiError>({ status: 'error', message: 'Bad request' }, 400);
   }
 
+  // build_city labor pays down the shared rebuild queue FIRST (homes before new
+  // buildings). Peek before locking to decide whether to also watch the shared
+  // rebuild key so concurrent contributors serialize on it (never over-apply).
+  const routeToRebuild = body.action === 'build_city' && (await buildReconstruction(store)).state.active;
+
   // Per-user optimistic energy spend: watch ONLY this user's lock key, so two
   // DIFFERENT users acting in the same instant never abort each other — only a
-  // genuine same-user double-tap conflicts (see beginUserLock).
-  const lock = await beginUserLock(redis, user.userId);
+  // genuine same-user double-tap conflicts (see beginUserLock). A rebuild
+  // contribution additionally watches the shared rebuild key.
+  const lock = await beginUserLock(redis, user.userId, routeToRebuild ? [KEYS.housesRebuild] : []);
   const player = await store.getPlayer(user.userId);
   if (!player) {
     await lock.abort();
@@ -625,6 +686,19 @@ api.post('/action', async (c) => {
   if (error) {
     await lock.abort();
     return c.json<ApiError>({ status: 'error', message: error }, 400);
+  }
+
+  // Under the lock, resolve the next home the city's labor should rebuild. The
+  // watch on housesRebuild makes this read consistent with the commit below.
+  let rebuildTarget: { userId: string; index: number; username: string; status: 'destroyed' | 'damaged'; done: number; needed: number } | null = null;
+  if (routeToRebuild) {
+    const [rows, damage, progress] = await Promise.all([
+      store.getHouseRows(),
+      store.getHouseDamage(),
+      store.getRebuildProgress(),
+    ]);
+    const named = await namedDamagedRows(store, rows, damage);
+    rebuildTarget = nextRebuildTarget(named, damage, progress);
   }
 
   const faction = BALANCE.factionPerAction[body.action];
@@ -664,10 +738,18 @@ api.post('/action', async (c) => {
     }
     await tx.hIncrBy(KEYS.dayActions(city.day), body.action, 1);
     await tx.hSet(KEYS.dayUserActions(city.day), { [user.userId]: JSON.stringify(mine) });
+    // Rebuild labor rides the same commit — one point toward the next home.
+    if (rebuildTarget) await tx.hIncrBy(KEYS.housesRebuild, rebuildTarget.userId, 1);
   });
   if (!committed) {
     return c.json<ApiError>({ status: 'error', message: 'Busy, try again' }, 409);
   }
+
+  // A home the community's labor just restored (this point completed it).
+  const rebuilt =
+    rebuildTarget && rebuildTarget.done + 1 >= rebuildTarget.needed
+      ? { username: rebuildTarget.username, index: rebuildTarget.index }
+      : null;
 
   // Non-critical bookkeeping outside the tx (contribution mirror + aggregates),
   // in parallel — every write here is an atomic increment or NX claim, never a
@@ -689,6 +771,8 @@ api.post('/action', async (c) => {
     unlockedTitle: repped.unlockedTitle,
     coinsGained: coined.coinsGained,
     economy: coined.economy,
+    reconstruction: (await buildReconstruction(store)).state,
+    rebuilt,
   });
 });
 

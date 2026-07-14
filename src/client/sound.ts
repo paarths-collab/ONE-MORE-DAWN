@@ -13,7 +13,13 @@ export type SfxName =
   | 'raid_warning'
   | 'dawn_report'
   | 'city_fallen'
-  | 'error_soft';
+  | 'error_soft'
+  | 'siege_bell'
+  | 'fireball'
+  | 'impact_hit'
+  | 'wall_crack'
+  | 'house_collapse'
+  | 'rebuild_done';
 
 const EXT = 'wav'; // change to 'ogg'/'mp3' if you swap in Kenney files with that extension
 const NAMES: SfxName[] = [
@@ -25,6 +31,12 @@ const NAMES: SfxName[] = [
   'dawn_report',
   'city_fallen',
   'error_soft',
+  'siege_bell',
+  'fireball',
+  'impact_hit',
+  'wall_crack',
+  'house_collapse',
+  'rebuild_done',
 ];
 const MUTE_KEY = 'omd_muted';
 const SFX_VOLUME = 0.5;

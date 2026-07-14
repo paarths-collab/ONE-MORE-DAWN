@@ -95,6 +95,28 @@ export type VillageHandle = {
    */
   setHouseCosmetics: (equipped: HouseCosmetics | null) => void;
   /**
+   * Play the stylized siege-at-dawn raid cinematic (6-12s, pooled + self-
+   * terminating). Shifts the sky red-orange, then arcs `fireballs` glowing
+   * projectiles from beyond the wall onto the wall, gate, watchtower, the houses
+   * in hitHouseIndices and a street tile, each landing with a flash, ember burst,
+   * dust ring and a brief scene shake. 'breach'/'fallen' break a wall segment and
+   * leave lingering smoke; 'fallen' hazes the whole town. Never throws.
+   */
+  playRaidCinematic: (opts: { outcome: 'held' | 'breach' | 'fallen'; fireballs: number; hitHouseIndices: number[] }) => void;
+  /**
+   * Render raid aftermath on specific houses: 'damaged' = scorch + darkened roof
+   * + a smoke wisp; 'destroyed' = burnt broken foundation + rubble + lingering
+   * smoke. Owner labels are preserved. Idempotent (clear + re-apply) and stored,
+   * so it re-applies automatically whenever setHouses remaps the houses. Passing
+   * [] clears all damage. Never throws.
+   */
+  setHouseDamage: (states: { index: number; status: 'destroyed' | 'damaged' }[]) => void;
+  /**
+   * Grow a ruined house back over ~1.5s (frame, then roof, then the full house)
+   * and clear that house's damage overlay at the end. Never throws.
+   */
+  rebuildHouse: (index: number) => void;
+  /**
    * Reveal community-funded land expansions: 'outer_fields' | 'river_ward' |
    * 'high_keep' (the shared LAND_EXPANSIONS ids, in funding order). Each id
    * develops a visible frontier district on the same continuous mainland.
@@ -345,6 +367,18 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
   let raidOn = false;
   let raidTint = 0;
   const raidSkyCol = new THREE.Color(0x662a20);
+  // siege cinematic mood (playRaidCinematic): siegeMood eases 0->1 while a raid
+  // plays out and biases the sky/fog/hemi/sun toward a red-orange dawn assault,
+  // then restores the clean preset with zero residue. Shake + heavy-flag live
+  // here so lerpEnv/tick can read them; the fireball + impact pools are built
+  // lazily lower down (ensureSiege). No per-frame allocations.
+  let siegeActive = false;
+  let siegeMood = 0;
+  let siegeHeavy = false;
+  const siegeSkyCol = new THREE.Color(0x2a0f0a);
+  const siegeEmberCol = new THREE.Color(0xff7a3a);
+  const siegeShake = new THREE.Vector3();
+  let siegeShakeApplied = false;
   function lerpEnv(dt: number) {
     const k = 1 - Math.exp(-dt * 1.6);
     env.bg.lerp(tCol.setHex(target.bg), k);
@@ -386,6 +420,19 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     discHalo.position.copy(tVec);
     disc.scale.setScalar(env.discScale);
     discHalo.scale.setScalar(env.discScale);
+
+    // siege cinematic: darken + redden sky/fog/hemi/sun while a raid plays out.
+    // Eased like raidTint so toggling it off lerps back to the clean preset.
+    siegeMood += ((siegeActive ? 1 : 0) - siegeMood) * k;
+    if (siegeMood > 0.002) {
+      const sb = scene.background as THREE.Color;
+      sb.lerp(siegeSkyCol, siegeMood * 0.5);
+      fog.color.copy(sb);
+      hemi.color.lerp(siegeEmberCol, siegeMood * 0.32);
+      hemi.intensity = env.hemiInt * (1 - siegeMood * 0.28);
+      sun.color.lerp(siegeEmberCol, siegeMood * 0.4);
+      sun.intensity = env.sunInt * (1 - siegeMood * 0.35);
+    }
   }
 
   // ---------- materials / kit ----------
@@ -1962,10 +2009,13 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     // raid ambience: slow ominous pulse beyond the gate + window-glow flicker
     // (glowMat.color was freshly copied from env.windowCol in lerpEnv above,
     // so the multiply never accumulates frame-over-frame)
-    raidLight.visible = raidTint > 0.002;
+    // shared with the siege cinematic: the alarm glow beyond the south gate
+    // reads as the besieging force, so raidTint and siegeMood both drive it.
+    raidLight.visible = raidTint > 0.002 || siegeMood > 0.002;
     if (raidLight.visible) {
-      raidLight.intensity = raidTint * (50 + Math.sin(t * 1.7) * 12 + Math.sin(t * 4.3) * 5);
-      glowMat.color.multiplyScalar(1 + 0.15 * Math.sin(t * 7) * raidTint);
+      const drive = Math.max(raidTint, siegeMood);
+      raidLight.intensity = drive * (50 + Math.sin(t * 1.7) * 12 + Math.sin(t * 4.3) * 5) + siegeMood * 30;
+      glowMat.color.multiplyScalar(1 + 0.15 * Math.sin(t * 7) * drive);
     } else {
       raidLight.intensity = 0;
     }
@@ -2024,8 +2074,16 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       smokePos[i] = y > 5.2 ? y - 3.0 : y;
     }
     smokeAttr.needsUpdate = true;
+    // advance the siege cinematic (fireballs, impacts, plumes, rebuilds, aftermath
+    // smoke) and apply this frame's camera shake AFTER controls.update() so the
+    // orbit state never drifts; the offset is removed again right after render.
+    advanceSiege(dt, t);
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
+    if (siegeShakeApplied) {
+      camera.position.sub(siegeShake);
+      siegeShakeApplied = false;
+    }
   };
   // Intro flyover: start high and far, glide down onto the town (slower fly
   // damping while introMaxRestore is set). Skipped for reduced-motion users.
@@ -2390,6 +2448,9 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       }
       // equipped cosmetics follow the remapped player house across refreshes
       applyHouseCosmetics();
+      // raid damage re-applies after every remap: a refresh rebuilds the house
+      // list, so stored damage states must re-render their ruins onto it.
+      applyHouseDamage();
     } catch {
       /* cosmetic overlay — never throw into the caller */
     }
@@ -2603,6 +2664,620 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     }
   }
 
+  // ---------- raid cinematic + house damage (playRaidCinematic / setHouseDamage / rebuildHouse) ----------
+  // Phone budget: all projectiles, impacts and smoke are POOLED and reused across
+  // fireballs and across raids; the tick advances them from arrays so there are no
+  // per-frame allocations. At most two transient extra lights (the impact flashes)
+  // and no shadow casters or postprocessing. Everything is added to the scene graph
+  // so dispose()'s traverse-sweep frees geometry + attached materials for free.
+  const MAX_FIREBALLS = 6; // 2-3 held, 5-6 breach/fallen
+  const MAX_IMPACTS = 8;
+  const MAX_PLUMES = 10;
+  type Fireball = {
+    core: THREE.Mesh; trail: THREE.Mesh; puff: THREE.Mesh;
+    from: THREE.Vector3; to: THREE.Vector3; peak: number;
+    startAt: number; dur: number; t: number;
+    state: 0 | 1 | 2; // 0 idle, 1 pending (waiting for startAt), 2 flying
+    houseIndex: number; // >=0 when this arc strikes a specific house
+  };
+  type Impact = {
+    flash: THREE.Mesh; flashMat: THREE.MeshBasicMaterial;
+    ring: THREE.Mesh; ringMat: THREE.MeshBasicMaterial;
+    embers: THREE.Points; emberMat: THREE.PointsMaterial;
+    emberPos: Float32Array; emberVel: Float32Array; emberAttr: THREE.BufferAttribute;
+    t: number; dur: number; active: boolean;
+  };
+  type Plume = {
+    points: THREE.Points; mat: THREE.PointsMaterial;
+    pos: Float32Array; base: Float32Array; attr: THREE.BufferAttribute;
+    t: number; dur: number; active: boolean;
+  };
+  const fireballs: Fireball[] = [];
+  const impacts: Impact[] = [];
+  const plumes: Plume[] = [];
+  const impactLights: THREE.PointLight[] = [];
+  let impactLightIdx = 0;
+  let hazeMesh: THREE.Mesh | null = null;
+  let hazeMat: THREE.MeshBasicMaterial | null = null;
+  let hazeTarget = 0;
+  let siegeBeaconMesh: THREE.Mesh | null = null;
+  let siegeReady = false;
+  let siegeElapsed = 0;
+  let siegeDuration = 0;
+  let shakeMag = 0;
+  // scratch vectors/quaternion reused every frame (no per-frame allocations)
+  const _sv1 = new THREE.Vector3();
+  const _dir = new THREE.Vector3();
+  const _dir2 = new THREE.Vector3();
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _q = new THREE.Quaternion();
+
+  function ensureSiege() {
+    if (siegeReady) return;
+    // shared projectile kit (one geometry + material per role, reused by all arcs)
+    const coreGeo = new THREE.SphereGeometry(0.55, 12, 10);
+    const trailGeo = new THREE.ConeGeometry(0.4, 2.4, 8);
+    const puffGeo = new THREE.SphereGeometry(0.55, 8, 8);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffe0a0, fog: false });
+    const trailMat = new THREE.MeshBasicMaterial({ color: 0xff5a1e, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    const puffMat = new THREE.MeshBasicMaterial({ color: 0x4a423c, transparent: true, opacity: 0.3, depthWrite: false, fog: false });
+    for (let i = 0; i < MAX_FIREBALLS; i++) {
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      const trail = new THREE.Mesh(trailGeo, trailMat);
+      const puff = new THREE.Mesh(puffGeo, puffMat);
+      core.renderOrder = 3;
+      trail.renderOrder = 2;
+      core.visible = trail.visible = puff.visible = false;
+      scene.add(core, trail, puff);
+      fireballs.push({ core, trail, puff, from: new THREE.Vector3(), to: new THREE.Vector3(), peak: 6, startAt: 0, dur: 1.2, t: 0, state: 0, houseIndex: -1 });
+    }
+    // impact kit: flash (additive), ground dust ring, ember burst (8 points)
+    const flashGeo = new THREE.SphereGeometry(1, 12, 10);
+    const ringGeo = new THREE.RingGeometry(0.5, 0.9, 20);
+    for (let i = 0; i < MAX_IMPACTS; i++) {
+      const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd08a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const flash = new THREE.Mesh(flashGeo, flashMat);
+      flash.renderOrder = 4;
+      flash.visible = false;
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xd8a060, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.visible = false;
+      const em = 8;
+      const emberPos = new Float32Array(em * 3);
+      const emberVel = new Float32Array(em * 3);
+      const eg = new THREE.BufferGeometry();
+      const emberAttr = new THREE.BufferAttribute(emberPos, 3);
+      eg.setAttribute('position', emberAttr);
+      const emberMat = new THREE.PointsMaterial({ color: 0xffa040, size: 0.5, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const embers = new THREE.Points(eg, emberMat);
+      embers.visible = false;
+      scene.add(flash, ring, embers);
+      impacts.push({ flash, flashMat, ring, ringMat, embers, emberMat, emberPos, emberVel, emberAttr, t: 0, dur: 0.5, active: false });
+    }
+    // lingering smoke plumes (~3s), 7 motes each
+    for (let i = 0; i < MAX_PLUMES; i++) {
+      const pm = 7;
+      const pos = new Float32Array(pm * 3);
+      const base = new Float32Array(pm);
+      const pg = new THREE.BufferGeometry();
+      const attr = new THREE.BufferAttribute(pos, 3);
+      pg.setAttribute('position', attr);
+      const mat = new THREE.PointsMaterial({ color: 0x6a6259, size: 0.9, transparent: true, opacity: 0, depthWrite: false });
+      const points = new THREE.Points(pg, mat);
+      points.visible = false;
+      scene.add(points);
+      plumes.push({ points, mat, pos, base, attr, t: 0, dur: 3.2, active: false });
+    }
+    // the two transient impact flash lights (no shadows, short range)
+    for (let i = 0; i < 2; i++) {
+      const l = new THREE.PointLight(0xff8a3a, 0, 16, 2);
+      scene.add(l);
+      impactLights.push(l);
+    }
+    // smoke haze plane for a 'fallen' town (fades in over the assault, lingers)
+    hazeMat = new THREE.MeshBasicMaterial({ color: 0x53483f, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    hazeMesh = new THREE.Mesh(new THREE.PlaneGeometry(180, 180), hazeMat);
+    hazeMesh.rotation.x = -Math.PI / 2;
+    hazeMesh.position.y = 17;
+    hazeMesh.visible = false;
+    scene.add(hazeMesh);
+    // watchtower beacon flare: an additive pulse at the south gate tower (a mesh,
+    // so it costs nothing against the two-light budget)
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff4a24, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    siegeBeaconMesh = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), beaconMat);
+    {
+      const a = GATE_ANGLES[0]! + 0.09;
+      const r = plateauR(GATE_ANGLES[0]!) - 2.6;
+      siegeBeaconMesh.position.set(Math.cos(a) * r, 4.2, Math.sin(a) * r);
+    }
+    siegeBeaconMesh.visible = false;
+    scene.add(siegeBeaconMesh);
+    siegeReady = true;
+  }
+
+  // ---------- wall breach (revealed on breach/fallen, hidden on held) ----------
+  // A pre-made broken segment + scorch decal at the south gate reads as a
+  // collapsed wall without touching the instanced palisade (degrade-safe).
+  let wallBreakGroup: THREE.Group | null = null;
+  let wallScorch: THREE.Mesh | null = null;
+  function ensureWallBreak() {
+    if (wallBreakGroup) return;
+    const a = GATE_ANGLES[0]!;
+    const r = plateauR(a) - 2.6;
+    const bx = Math.cos(a) * r;
+    const bz = Math.sin(a) * r;
+    const inX = -Math.cos(a);
+    const inZ = -Math.sin(a); // unit vector toward the city centre
+    const tanX = -Math.sin(a);
+    const tanZ = Math.cos(a); // along the wall line
+    const g = new THREE.Group();
+    // toppled logs on the ground across the gap
+    for (let i = 0; i < 4; i++) {
+      const off = (i - 1.5) * 1.0;
+      const px = bx + tanX * off + inX * 0.6;
+      const pz = bz + tanZ * off + inZ * 0.6;
+      const log = cyl(0.28, 2.4, MAT.timberDark, px, 0.3, pz, 6);
+      log.rotation.z = Math.PI / 2 - 0.2 + Math.random() * 0.4;
+      log.rotation.y = Math.atan2(tanZ, tanX) + (Math.random() - 0.5) * 0.5;
+      g.add(log);
+    }
+    // two leaning stub posts flanking the breach
+    for (const off of [-1.7, 1.7]) {
+      const post = cyl(0.3, 1.6, MAT.timberDark, bx + tanX * off, 0.7, bz + tanZ * off, 6);
+      post.rotation.x = (Math.random() - 0.5) * 0.5;
+      post.rotation.z = (Math.random() - 0.5) * 0.6;
+      g.add(post);
+    }
+    // rubble scattered inside the gap
+    for (let i = 0; i < 5; i++) {
+      const off = (Math.random() - 0.5) * 3.2;
+      const dd = Math.random() * 1.4;
+      const px = bx + tanX * off + inX * dd;
+      const pz = bz + tanZ * off + inZ * dd;
+      const s = 0.5 + Math.random() * 0.5;
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), lam(Math.random() > 0.5 ? C.rockA : C.rockB, { flatShading: true }));
+      rock.scale.set(s, s * 0.8, s);
+      rock.position.set(px, s * 0.4, pz);
+      g.add(rock);
+    }
+    g.visible = false;
+    scene.add(g);
+    wallBreakGroup = g;
+    const sMat = new THREE.MeshBasicMaterial({ color: 0x1a1512, transparent: true, opacity: 0.6, depthWrite: false, fog: false });
+    const scorch = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), sMat);
+    scorch.rotation.x = -Math.PI / 2;
+    scorch.position.set(bx + inX * 1.2, 0.05, bz + inZ * 1.2);
+    scorch.visible = false;
+    scene.add(scorch);
+    wallScorch = scorch;
+  }
+  function setWallBreach(on: boolean) {
+    ensureWallBreak();
+    if (wallBreakGroup) wallBreakGroup.visible = on;
+    if (wallScorch) wallScorch.visible = on;
+  }
+
+  // ---------- persistent aftermath smoke (setHouseDamage wisps) ----------
+  // One Points cloud, rebuilt (not per-frame) when the damage set changes, then
+  // risen + wrapped in the tick like the chimney smoke. World-space positions.
+  const DMG_SMOKE_MAX = 200;
+  const damageSmokePos = new Float32Array(DMG_SMOKE_MAX * 3);
+  const damageSmokeBase = new Float32Array(DMG_SMOKE_MAX);
+  let damageSmokeCount = 0;
+  const damageSmokeGeo = new THREE.BufferGeometry();
+  const damageSmokeAttr = new THREE.BufferAttribute(damageSmokePos, 3);
+  damageSmokeGeo.setAttribute('position', damageSmokeAttr);
+  damageSmokeGeo.setDrawRange(0, 0);
+  const damageSmokeMat = new THREE.PointsMaterial({ color: 0x6b6157, size: 0.8, transparent: true, opacity: 0.42, depthWrite: false });
+  const damageSmoke = new THREE.Points(damageSmokeGeo, damageSmokeMat);
+  damageSmoke.visible = false;
+  scene.add(damageSmoke);
+
+  // ---------- house damage overlay (setHouseDamage) ----------
+  // Stored so setHouses can re-apply it after a remap (see the applyHouseDamage
+  // call there). Shared materials, per-house geometry disposed on clear.
+  const charMat = lam(0x2a221e); // burnt timber / broken foundation
+  const rubbleMatA = lam(0x3a332c, { flatShading: true });
+  const rubbleMatB = lam(0x2c261f, { flatShading: true });
+  const damageRoofDarkMat = lam(0x241d18); // scorched roof on a damaged house
+  const scorchMat = new THREE.MeshBasicMaterial({ color: 0x140f0c, transparent: true, opacity: 0.55, depthWrite: false, fog: false });
+  const houseDamageStates: { index: number; status: 'destroyed' | 'damaged' }[] = [];
+  const damageObjects: THREE.Object3D[] = []; // per-house overlay groups
+  const damageHidden: THREE.Object3D[] = []; // structure hidden on 'destroyed'
+  const damageRoofSwaps: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] }[] = [];
+  function clearHouseDamageOverlay() {
+    for (const s of damageRoofSwaps) s.mesh.material = s.original;
+    damageRoofSwaps.length = 0;
+    for (const o of damageHidden) o.visible = true;
+    damageHidden.length = 0;
+    for (const o of damageObjects) {
+      o.parent?.remove(o);
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        m.geometry?.dispose?.(); // materials are shared, only geometry is per-house
+      });
+    }
+    damageObjects.length = 0;
+  }
+  function applyHouseDamage() {
+    clearHouseDamageOverlay();
+    const anchors: { x: number; z: number; by: number }[] = [];
+    if (houseDamageStates.length > 0) {
+      const { houses } = ensureGrowOrder();
+      for (const st of houseDamageStates) {
+        const g = houses[st.index];
+        if (!g) continue;
+        const overlay = new THREE.Group();
+        if (st.status === 'destroyed') {
+          // hide the standing structure (meshes + cosmetics group), keep the
+          // owner label (a CSS2DObject, neither Mesh nor Group) above the ruin
+          for (const c of g.children) {
+            if ((c as THREE.Mesh).isMesh || (c as THREE.Group).isGroup) {
+              c.visible = false;
+              damageHidden.push(c);
+            }
+          }
+          overlay.add(box(1.9, 0.4, 1.6, charMat, 0, 0.2, 0));
+          overlay.add(box(0.4, 0.85, 0.4, charMat, -0.7, 0.42, 0.5));
+          overlay.add(box(0.35, 0.6, 0.35, charMat, 0.75, 0.3, -0.4));
+          for (let i = 0; i < 4; i++) {
+            const rs = 0.34 + Math.random() * 0.4;
+            const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), i % 2 ? rubbleMatA : rubbleMatB);
+            rock.scale.set(rs, rs * 0.7, rs);
+            rock.position.set((Math.random() - 0.5) * 1.8, rs * 0.35, (Math.random() - 0.5) * 1.5);
+            overlay.add(rock);
+          }
+          const scorch = new THREE.Mesh(new THREE.CircleGeometry(1.8, 18), scorchMat);
+          scorch.rotation.x = -Math.PI / 2;
+          scorch.position.y = 0.04;
+          overlay.add(scorch);
+          for (let k = 0; k < 5; k++) anchors.push({ x: g.position.x, z: g.position.z, by: 0.8 });
+        } else {
+          // damaged: darken the roof, scorch the ground, char a wall corner
+          const roof = roofMeshOf(g);
+          if (roof) {
+            damageRoofSwaps.push({ mesh: roof, original: roof.material });
+            roof.material = damageRoofDarkMat;
+          }
+          overlay.add(box(0.7, 0.5, 0.7, charMat, 0.4, 0.25, -0.3));
+          const scorch = new THREE.Mesh(new THREE.CircleGeometry(1.3, 16), scorchMat);
+          scorch.rotation.x = -Math.PI / 2;
+          scorch.position.set(0.2, 0.04, 0.6);
+          overlay.add(scorch);
+          for (let k = 0; k < 3; k++) anchors.push({ x: g.position.x, z: g.position.z, by: 2.2 });
+        }
+        g.add(overlay);
+        damageObjects.push(overlay);
+      }
+    }
+    // rebuild the aftermath smoke cloud from the new anchor set
+    const n = Math.min(DMG_SMOKE_MAX, anchors.length);
+    for (let i = 0; i < n; i++) {
+      const a = anchors[i]!;
+      damageSmokePos[i * 3] = a.x + (Math.random() - 0.5) * 0.9;
+      damageSmokePos[i * 3 + 1] = a.by + Math.random() * 2.4;
+      damageSmokePos[i * 3 + 2] = a.z + (Math.random() - 0.5) * 0.9;
+      damageSmokeBase[i] = a.by;
+    }
+    damageSmokeCount = n;
+    damageSmokeGeo.setDrawRange(0, n);
+    damageSmokeAttr.needsUpdate = true;
+    damageSmoke.visible = n > 0;
+  }
+  function setHouseDamage(states: { index: number; status: 'destroyed' | 'damaged' }[]) {
+    try {
+      houseDamageStates.length = 0;
+      if (Array.isArray(states)) {
+        for (const s of states) {
+          if (!s) continue;
+          const status = s.status === 'destroyed' ? 'destroyed' : s.status === 'damaged' ? 'damaged' : null;
+          if (status === null) continue;
+          const index = Math.round(s.index);
+          if (!Number.isFinite(index) || index < 0) continue;
+          houseDamageStates.push({ index, status });
+        }
+      }
+      applyHouseDamage();
+    } catch {
+      /* aftermath overlay, never throw into the caller */
+    }
+  }
+
+  // ---------- house rebuild grow-back (rebuildHouse) ----------
+  // Ruins -> frame -> roof -> house over ~1.5s, reusing the group-scale convention
+  // the rest of the scene uses. Advanced from the tick, self-terminating.
+  type Rebuild = { g: THREE.Group; roof: THREE.Mesh | null; t: number; dur: number; targetScale: number };
+  const rebuilds: Rebuild[] = [];
+  function rebuildHouse(index: number) {
+    try {
+      const { houses } = ensureGrowOrder();
+      const idx = Math.round(index);
+      const g = houses[idx];
+      if (!g) return;
+      // drop this house's damage state, then re-render the rest so its ruin is
+      // cleared and its structure restored before the grow-back plays
+      const before = houseDamageStates.length;
+      for (let i = houseDamageStates.length - 1; i >= 0; i--) {
+        if (houseDamageStates[i]!.index === idx) houseDamageStates.splice(i, 1);
+      }
+      if (before !== houseDamageStates.length) applyHouseDamage();
+      const targetScale = g.scale.x || 1;
+      const roof = roofMeshOf(g);
+      g.scale.setScalar(Math.max(0.02, targetScale * 0.05));
+      if (roof) roof.visible = false; // reveal the roof partway through the grow
+      rebuilds.push({ g, roof, t: 0, dur: 1.5, targetScale });
+    } catch {
+      /* never throw into the caller */
+    }
+  }
+  function advanceRebuilds(dt: number) {
+    for (let i = rebuilds.length - 1; i >= 0; i--) {
+      const rb = rebuilds[i]!;
+      rb.t += dt;
+      const p = Math.min(1, rb.t / rb.dur);
+      if (rb.roof) rb.roof.visible = p > 0.45; // frame first, roof second
+      let s: number;
+      if (p < 0.85) s = rb.targetScale * (0.05 + 0.95 * (p / 0.85));
+      else s = rb.targetScale * (1 + Math.sin(((p - 0.85) / 0.15) * Math.PI) * 0.12); // settle pop
+      rb.g.scale.setScalar(s);
+      if (p >= 1) {
+        rb.g.scale.setScalar(rb.targetScale);
+        if (rb.roof) rb.roof.visible = true;
+        rebuilds.splice(i, 1);
+      }
+    }
+  }
+
+  // ---------- cinematic driver ----------
+  function triggerImpact(x: number, y: number, z: number) {
+    let im = impacts.find((s) => !s.active);
+    if (!im) im = impacts[0]!; // all busy: recycle the first slot
+    im.active = true;
+    im.t = 0;
+    im.dur = 0.5;
+    im.flash.position.set(x, y, z);
+    im.flash.scale.setScalar(0.5);
+    im.flash.visible = true;
+    im.flashMat.opacity = 1;
+    im.ring.position.set(x, 0.06, z);
+    im.ring.scale.setScalar(1);
+    im.ring.visible = true;
+    im.ringMat.opacity = 0.6;
+    const n = im.emberPos.length / 3;
+    for (let k = 0; k < n; k++) {
+      im.emberPos[k * 3] = x;
+      im.emberPos[k * 3 + 1] = y;
+      im.emberPos[k * 3 + 2] = z;
+      const ea = Math.random() * Math.PI * 2;
+      const sp = 2 + Math.random() * 4;
+      im.emberVel[k * 3] = Math.cos(ea) * sp;
+      im.emberVel[k * 3 + 1] = 3 + Math.random() * 5;
+      im.emberVel[k * 3 + 2] = Math.sin(ea) * sp;
+    }
+    im.embers.visible = true;
+    im.emberMat.opacity = 1;
+    im.emberAttr.needsUpdate = true;
+    const l = impactLights[impactLightIdx % impactLights.length]!;
+    impactLightIdx++;
+    l.position.set(x, y + 1.4, z);
+    l.intensity = siegeHeavy ? 60 : 40;
+  }
+  function triggerPlume(x: number, y: number, z: number) {
+    let pl = plumes.find((s) => !s.active);
+    if (!pl) pl = plumes[0]!;
+    pl.active = true;
+    pl.t = 0;
+    pl.dur = 3.0 + Math.random() * 0.6;
+    const by = Math.max(0.4, y);
+    const n = pl.pos.length / 3;
+    for (let k = 0; k < n; k++) {
+      pl.pos[k * 3] = x + (Math.random() - 0.5) * 1.2;
+      pl.pos[k * 3 + 1] = by + Math.random() * 1.6;
+      pl.pos[k * 3 + 2] = z + (Math.random() - 0.5) * 1.2;
+      pl.base[k] = by;
+    }
+    pl.points.visible = true;
+    pl.mat.opacity = 0.5;
+    pl.attr.needsUpdate = true;
+  }
+  function onFireballLand(fb: Fireball) {
+    triggerImpact(fb.to.x, fb.to.y, fb.to.z);
+    triggerPlume(fb.to.x, fb.to.y + 0.4, fb.to.z);
+    if (fb.houseIndex >= 0) triggerPlume(fb.to.x, fb.to.y + 1.4, fb.to.z); // struck house catches fire
+    shakeMag = Math.max(shakeMag, siegeHeavy ? 0.5 : 0.22);
+  }
+  function playRaidCinematic(opts: { outcome: 'held' | 'breach' | 'fallen'; fireballs: number; hitHouseIndices: number[] }) {
+    try {
+      ensureSiege();
+      const outcome = opts && (opts.outcome === 'breach' || opts.outcome === 'fallen') ? opts.outcome : 'held';
+      siegeHeavy = outcome !== 'held';
+      const requested = opts && Number.isFinite(opts.fireballs) ? Math.round(opts.fireballs) : siegeHeavy ? 5 : 2;
+      const count = Math.max(1, Math.min(MAX_FIREBALLS, requested));
+      const hitIdx = opts && Array.isArray(opts.hitHouseIndices) ? opts.hitHouseIndices : [];
+      const { houses } = ensureGrowOrder();
+
+      // wall segment breaks on breach/fallen; a 'fallen' town also hazes over
+      setWallBreach(siegeHeavy);
+      hazeTarget = outcome === 'fallen' ? 0.16 : 0;
+
+      // target order: struck houses first (so small fireball counts still hit
+      // homes), then the wall, the gate, the watchtower, and a street tile
+      const targets: { x: number; y: number; z: number; house: number }[] = [];
+      const seen = new Set<number>();
+      for (const raw of hitIdx) {
+        const idx = Math.round(raw);
+        if (seen.has(idx)) continue;
+        const g = houses[idx];
+        if (!g) continue;
+        seen.add(idx);
+        targets.push({ x: g.position.x, y: 0.8, z: g.position.z, house: idx });
+      }
+      const ga = GATE_ANGLES[0]!;
+      const [gx, gz] = gates[0]!;
+      const wallA = ga + 0.28;
+      const wallR = plateauR(wallA) - 2.6;
+      targets.push({ x: Math.cos(wallA) * wallR, y: 2.0, z: Math.sin(wallA) * wallR, house: -1 }); // wall
+      targets.push({ x: gx, y: 1.0, z: gz, house: -1 }); // gate
+      const towR = plateauR(ga) - 2.6;
+      targets.push({ x: Math.cos(ga + 0.09) * towR, y: 3.4, z: Math.sin(ga + 0.09) * towR, house: -1 }); // watchtower
+      targets.push({ x: gx * 0.42, y: 0.4, z: gz * 0.42, house: -1 }); // street tile
+
+      const warmup = 0.55;
+      const stagger = 0.36;
+      for (let i = 0; i < count; i++) {
+        const fb = fireballs[i]!;
+        const tg = targets[i % targets.length]!;
+        const ang = Math.atan2(tg.z, tg.x);
+        const outR = plateauR(ang) + 16 + Math.random() * 8; // start high, beyond the wall
+        fb.from.set(Math.cos(ang) * outR, 40 + Math.random() * 12, Math.sin(ang) * outR);
+        fb.to.set(tg.x, tg.y, tg.z);
+        fb.peak = 5 + Math.random() * 4;
+        fb.dur = 1.05 + Math.random() * 0.4;
+        fb.startAt = warmup + i * stagger;
+        fb.t = 0;
+        fb.state = 1;
+        fb.houseIndex = tg.house;
+        fb.core.visible = fb.trail.visible = fb.puff.visible = false;
+      }
+      for (let i = count; i < fireballs.length; i++) {
+        const fb = fireballs[i]!;
+        fb.state = 0;
+        fb.core.visible = fb.trail.visible = fb.puff.visible = false;
+      }
+      siegeActive = true;
+      siegeElapsed = 0;
+      const lastStart = warmup + (count - 1) * stagger;
+      const linger = siegeHeavy ? 3.6 : 2.4;
+      siegeDuration = Math.max(6, Math.min(14, lastStart + 1.5 + linger + (outcome === 'fallen' ? 3 : 0)));
+    } catch {
+      /* cinematic is cosmetic, never throw into the caller */
+    }
+  }
+  function advanceSiege(dt: number, t: number) {
+    // rebuilds + aftermath smoke run regardless of a cinematic being active
+    if (rebuilds.length > 0) advanceRebuilds(dt);
+    if (damageSmokeCount > 0) {
+      for (let i = 0; i < damageSmokeCount; i++) {
+        let y = damageSmokePos[i * 3 + 1]! + dt * 0.5;
+        const by = damageSmokeBase[i]!;
+        if (y > by + 2.6) y -= 2.6;
+        damageSmokePos[i * 3 + 1] = y;
+      }
+      damageSmokeAttr.needsUpdate = true;
+    }
+    if (!siegeReady) return;
+
+    if (siegeActive) siegeElapsed += dt;
+    let anyFlying = false;
+    for (const fb of fireballs) {
+      if (fb.state === 1) {
+        if (siegeElapsed >= fb.startAt) {
+          fb.state = 2;
+          fb.t = 0;
+        } else {
+          anyFlying = true;
+          continue;
+        }
+      }
+      if (fb.state === 2) {
+        fb.t += dt;
+        const p = Math.min(1, fb.t / fb.dur);
+        _sv1.lerpVectors(fb.from, fb.to, p);
+        _sv1.y += fb.peak * Math.sin(Math.PI * p); // slight bow onto the descent
+        fb.core.position.copy(_sv1);
+        fb.core.scale.setScalar(1 + 0.2 * Math.sin(t * 40 + fb.startAt * 10)); // flicker
+        fb.core.visible = true;
+        _dir.subVectors(fb.to, fb.from);
+        _dir.y = 0;
+        _dir.normalize();
+        _dir2.set(-_dir.x, 0.35, -_dir.z).normalize(); // tail points back + slightly up
+        _q.setFromUnitVectors(_up, _dir2);
+        fb.trail.position.copy(_sv1);
+        fb.trail.quaternion.copy(_q);
+        fb.trail.visible = true;
+        fb.puff.position.set(_sv1.x - _dir.x * 1.2, _sv1.y + 0.2, _sv1.z - _dir.z * 1.2);
+        fb.puff.visible = true;
+        if (p >= 1) {
+          fb.state = 0;
+          fb.core.visible = fb.trail.visible = fb.puff.visible = false;
+          onFireballLand(fb);
+        } else {
+          anyFlying = true;
+        }
+      }
+    }
+    // impacts: flash grows + fades, dust ring expands, embers arc under gravity
+    for (const im of impacts) {
+      if (!im.active) continue;
+      im.t += dt;
+      const p = Math.min(1, im.t / im.dur);
+      im.flash.scale.setScalar(0.5 + p * 2.4);
+      im.flashMat.opacity = Math.max(0, 1 - p);
+      im.ring.scale.setScalar(1 + p * 3.4);
+      im.ringMat.opacity = 0.6 * (1 - p);
+      const n = im.emberPos.length / 3;
+      for (let k = 0; k < n; k++) {
+        const vy = im.emberVel[k * 3 + 1]!;
+        im.emberPos[k * 3] = im.emberPos[k * 3]! + im.emberVel[k * 3]! * dt;
+        im.emberPos[k * 3 + 1] = im.emberPos[k * 3 + 1]! + vy * dt;
+        im.emberPos[k * 3 + 2] = im.emberPos[k * 3 + 2]! + im.emberVel[k * 3 + 2]! * dt;
+        im.emberVel[k * 3 + 1] = vy - 9 * dt;
+      }
+      im.emberAttr.needsUpdate = true;
+      im.emberMat.opacity = Math.max(0, 1 - p);
+      if (p >= 1) {
+        im.active = false;
+        im.flash.visible = false;
+        im.ring.visible = false;
+        im.embers.visible = false;
+      }
+    }
+    // lingering plumes rise + fade
+    for (const pl of plumes) {
+      if (!pl.active) continue;
+      pl.t += dt;
+      const p = Math.min(1, pl.t / pl.dur);
+      const n = pl.pos.length / 3;
+      for (let k = 0; k < n; k++) {
+        pl.pos[k * 3 + 1] = pl.pos[k * 3 + 1]! + dt * (0.8 + (0.4 * k) / n);
+      }
+      pl.attr.needsUpdate = true;
+      pl.mat.opacity = 0.5 * (1 - p);
+      if (p >= 1) {
+        pl.active = false;
+        pl.points.visible = false;
+      }
+    }
+    // impact flash lights decay to black
+    for (const l of impactLights) {
+      if (l.intensity > 0.5) l.intensity *= Math.exp(-dt * 3.2);
+      else l.intensity = 0;
+    }
+    // smoke haze eases toward its target; it clears once the cinematic ends
+    if (hazeMesh && hazeMat) {
+      if (!siegeActive) hazeTarget = 0;
+      const o = hazeMat.opacity + (hazeTarget - hazeMat.opacity) * (1 - Math.exp(-dt * 0.8));
+      hazeMat.opacity = o;
+      hazeMesh.visible = o > 0.004;
+    }
+    // watchtower beacon flare pulses with the siege mood
+    if (siegeBeaconMesh) {
+      (siegeBeaconMesh.material as THREE.MeshBasicMaterial).opacity = siegeMood * (0.4 + 0.35 * Math.sin(t * 9));
+      siegeBeaconMesh.visible = siegeMood > 0.01;
+      siegeBeaconMesh.scale.setScalar(1 + siegeMood * 0.3 + 0.15 * Math.sin(t * 9));
+    }
+    // camera shake: decaying random nudge, applied here and removed after render
+    if (shakeMag > 0.001) {
+      shakeMag *= Math.exp(-dt * 6);
+      siegeShake.set(Math.random() - 0.5, (Math.random() - 0.5) * 0.6, Math.random() - 0.5).multiplyScalar(shakeMag);
+      camera.position.add(siegeShake);
+      siegeShakeApplied = true;
+    }
+    // the cinematic self-terminates once the timeline elapses and nothing flies
+    if (siegeActive && siegeElapsed >= siegeDuration && !anyFlying) siegeActive = false;
+  }
+
   const handle: VillageHandle = {
     setTimeOfDay: (tod) => {
       target = PRESETS[tod];
@@ -2631,6 +3306,9 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     setBuildStage,
     setHouses,
     setHouseCosmetics,
+    playRaidCinematic,
+    setHouseDamage,
+    rebuildHouse,
     setLandParcels,
     setDistantCities: (cities) => {
       try {
@@ -2659,6 +3337,13 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       cosmeticGoldMat.dispose();
       cosmeticBannerMat.dispose();
       cosmeticLeafMat.dispose();
+      // shared raid-damage materials may be detached from the graph right now,
+      // so the sweep below would miss them (double dispose is harmless)
+      charMat.dispose();
+      rubbleMatA.dispose();
+      rubbleMatB.dispose();
+      damageRoofDarkMat.dispose();
+      scorchMat.dispose();
       for (const t of ownerTimers) window.clearTimeout(t);
       ownerTimers.clear();
       for (const a of actors) {

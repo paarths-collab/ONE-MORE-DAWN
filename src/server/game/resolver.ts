@@ -105,6 +105,9 @@ export type ResolveResult = {
   entry: TimelineEntry;
   /** Dawn verdict for the day's Marked — callers persist it for savedYesterday. */
   marked: { name: string; saved: boolean };
+  /** Set when a Red Signal struck: the outcome drives home damage in lazyResolve.
+   *  held = fully dampened (no souls lost), breach = souls lost, fallen = city fell. */
+  raid: { outcome: 'held' | 'breach' | 'fallen' } | null;
 };
 
 const TRAIT_IDS: CityTraitId[] = ['standard', 'frozen', 'crowded', 'militarized', 'sick'];
@@ -376,6 +379,7 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
   };
 
   // --- 4b. Red Signal raid ---
+  let raidOutcome: 'held' | 'breach' | 'fallen' | null = null;
   if (next.threat >= BALANCE.raid.triggerThreshold) {
     // Each guard action today softens every raid loss (floored at 0 per-loss).
     // A built Wall adds a flat raidDampen on top (bounded; 0 without the wall).
@@ -392,10 +396,15 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
     next.threat = BALANCE.raid.postRaidThreat;
 
     const raidFelled = next.population <= BALANCE.fall.populationThreshold;
+    // Outcome: fell -> fallen; souls lost -> breach (homes destroyed);
+    // fully dampened by defense -> held (the wall held, cosmetic damage only).
+    raidOutcome = raidFelled ? 'fallen' : populationLoss > 0 ? 'breach' : 'held';
     events.push(
       raidFelled
         ? 'The Red Signal came in the night. The city could not hold, it fell.'
-        : 'The Red Signal came in the night. The city held, but paid in blood.',
+        : raidOutcome === 'held'
+          ? 'The Red Signal came in the night. The wall held; the city stood firm.'
+          : 'The Red Signal came in the night. The city held, but paid in blood.',
     );
   }
 
@@ -457,5 +466,10 @@ export const resolveDay = (city: CityState, inputs: DayInputs): ResolveResult =>
     winningOptionId: winner,
   };
 
-  return { city: next, entry, marked: { name: marked.name, saved: markedSaved } };
+  return {
+    city: next,
+    entry,
+    marked: { name: marked.name, saved: markedSaved },
+    raid: raidOutcome ? { outcome: raidOutcome } : null,
+  };
 };

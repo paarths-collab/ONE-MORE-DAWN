@@ -453,6 +453,37 @@ export class Store {
     return (await this.normalizedHouseRows())[0]?.userId ?? null;
   }
 
+  /** Compacted userId->index rows (public view of the registry). */
+  async getHouseRows(): Promise<{ userId: string; index: number }[]> {
+    return this.normalizedHouseRows();
+  }
+
+  // ----- raid damage + shared reconstruction -----
+  async getHouseDamage(): Promise<Record<string, 'destroyed' | 'damaged'>> {
+    const raw = await this.redis.hGetAll(KEYS.housesDamage);
+    const out: Record<string, 'destroyed' | 'damaged'> = {};
+    for (const [userId, v] of Object.entries(raw)) {
+      if (v === 'destroyed' || v === 'damaged') out[userId] = v;
+    }
+    return out;
+  }
+
+  /** Stamp the raid's struck homes (destroyed/damaged), a one-time write. */
+  async setHouseDamage(entries: Record<string, 'destroyed' | 'damaged'>): Promise<void> {
+    if (Object.keys(entries).length === 0) return;
+    await this.redis.hSet(KEYS.housesDamage, entries);
+  }
+
+  async getRebuildProgress(): Promise<Record<string, number>> {
+    const raw = await this.redis.hGetAll(KEYS.housesRebuild);
+    const out: Record<string, number> = {};
+    for (const [userId, v] of Object.entries(raw)) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) out[userId] = n;
+    }
+    return out;
+  }
+
   // ----- timeline + history -----
   async appendTimeline(entry: TimelineEntry): Promise<void> {
     await this.redis.hSet(KEYS.timeline, {

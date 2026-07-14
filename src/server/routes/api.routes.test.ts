@@ -223,7 +223,9 @@ describe('GET /api/init houses', () => {
       founder: null,
       yours: null,
       named: [],
+      damaged: [],
     });
+    expect(body.reconstruction).toEqual({ active: false, required: 0, contributed: 0, destroyed: 0, damaged: 0, next: null });
   });
 });
 
@@ -370,6 +372,46 @@ describe('Coin economy — accepted contributions earn, everything else does not
     expect(strategy.status).toBe(409);
     expect(await strategy.json()).toEqual({ status: 'error', message: 'Open the game first' });
     expect(await store.getPlayer('t2_missing')).toBeUndefined();
+  });
+});
+
+describe('POST /action — community reconstruction', () => {
+  it('routes build_city labor to the shared rebuild queue and restores a home', async () => {
+    // A raid damaged a neighbor's house; the whole city rebuilds it (not just
+    // the owner). Founder (index 0) + neighbor (index 1) + helper (index 2).
+    await onboardAndAct('t2_founder', 'founder', 'farmer', 'grow_food');
+    await openUser('t2_neighbor', 'neighbor');
+    await store.registerHouse('t2_neighbor');
+    await store.setHouseDamage({ t2_neighbor: 'damaged' });
+    // One labor short, so a single build_city completes the restore.
+    await fake.hSet(KEYS.housesRebuild, { t2_neighbor: String(BALANCE.reconstruction.laborPerDamaged - 1) });
+
+    await onboardAndAct('t2_helper', 'helper', 'farmer', 'grow_food');
+    ctx.userId = 't2_helper';
+    const res = await api.request('/action', postJson({ action: 'build_city' }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ActionResponse;
+    // The community's labor restored the neighbor's home — ownership preserved.
+    expect(body.rebuilt).toEqual({ username: 'neighbor', index: 1 });
+    expect(body.reconstruction.active).toBe(false);
+    // The restored home drops off the /init damaged list.
+    const init = (await (await api.request('/init')).json()) as InitResponse;
+    expect(init.houses.damaged).toEqual([]);
+    expect(init.reconstruction.active).toBe(false);
+  });
+
+  it('build_city advances the queue without restoring when labor is short', async () => {
+    await onboardAndAct('t2_a', 'aa', 'farmer', 'grow_food');
+    await openUser('t2_b', 'bb');
+    await store.registerHouse('t2_b');
+    await store.setHouseDamage({ t2_b: 'destroyed' }); // needs 12 labor
+    ctx.userId = 't2_a';
+    const res = await api.request('/action', postJson({ action: 'build_city' }));
+    const body = (await res.json()) as ActionResponse;
+    expect(body.rebuilt).toBeNull();
+    expect(body.reconstruction.active).toBe(true);
+    expect(body.reconstruction.next).toMatchObject({ username: 'bb', index: 1, status: 'destroyed', done: 1 });
+    expect(await store.getRebuildProgress()).toEqual({ t2_b: 1 });
   });
 });
 

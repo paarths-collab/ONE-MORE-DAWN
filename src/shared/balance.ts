@@ -257,6 +257,23 @@ export const BALANCE = {
     moraleLoss: 15,
     guardDampenPerAction: 3,
   },
+
+  // A house belongs to one Redditor, but when a raid destroys it the WHOLE city
+  // rebuilds it. Destroyed/damaged homes enter a shared reconstruction queue;
+  // build_city labor pays it down (destroyed homes first) before any new
+  // building rises. Ownership is never lost — damage is a transient overlay.
+  reconstruction: {
+    laborPerDestroyed: 12,
+    laborPerDamaged: 5,
+    // Homes struck per raid outcome: [min, max] destroyed, [min, max] damaged.
+    // A fully-dampened raid (strong defense) holds with at most cosmetic damage;
+    // a breach costs homes; a fall scars the city before Phoenix rebirth.
+    select: {
+      held: { destroy: [0, 0], damage: [0, 1] },
+      breach: { destroy: [1, 3], damage: [1, 2] },
+      fallen: { destroy: [3, 5], damage: [0, 2] },
+    },
+  },
 } as const;
 
 export const DAY_ZERO_CRISIS_ID = 'first_light';
