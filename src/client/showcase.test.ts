@@ -29,8 +29,10 @@ describe('recording showcase gate', () => {
     expect(showcaseSceneFromSearch('?showcase=1')).toBe('camp');
     expect(showcaseSceneFromSearch('?showcase=1&scene=raid')).toBe('raid');
     expect(showcaseSceneFromSearch('?showcase=1&scene=made-up')).toBe('camp');
-    expect(showcaseAutoplayFromSearch('?showcase=1')).toBe(false);
+    // Auto-plays hands-free by default; ?autoplay=0 opts into manual stepping.
+    expect(showcaseAutoplayFromSearch('?showcase=1')).toBe(true);
     expect(showcaseAutoplayFromSearch('?showcase=1&autoplay=1')).toBe(true);
+    expect(showcaseAutoplayFromSearch('?showcase=1&autoplay=0')).toBe(false);
   });
 
   it('uses a valid tap sequence for the real puzzle board', () => {

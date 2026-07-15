@@ -120,8 +120,10 @@ export const showcaseSceneFromSearch = (search: string): ShowcaseSceneId => {
   return SHOWCASE_SCENES.find((scene) => scene.id === requested)?.id ?? 'camp';
 };
 
+// Auto-play by default: the showcase runs itself hands-free. Opt out with
+// ?autoplay=0 for frame-by-frame manual stepping.
 export const showcaseAutoplayFromSearch = (search: string): boolean =>
-  new URLSearchParams(search).get('autoplay') === '1';
+  new URLSearchParams(search).get('autoplay') !== '0';
 
 export const showcaseCleanCaptureFromSearch = (search: string): boolean =>
   new URLSearchParams(search).get('clean') === '1';

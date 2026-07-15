@@ -19,9 +19,13 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [soundPrimed, setSoundPrimed] = useState(false);
-  // Capture is clean and paused by default. The editing strip appears only on D.
+  // Hands-free by default: the control strip stays hidden (press D to edit), but
+  // the story titles/overlays are SHOWN so the auto-running demo narrates itself.
+  // Pass ?clean=1 to hide the overlays for a pure-gameplay capture.
   const [controlsHidden, setControlsHidden] = useState(true);
-  const [directorHidden, setDirectorHidden] = useState(true);
+  const [directorHidden, setDirectorHidden] = useState(() =>
+    showcaseCleanCaptureFromSearch(window.location.search),
+  );
   const [hideCursor, setHideCursor] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [index, setIndex] = useState(() =>
