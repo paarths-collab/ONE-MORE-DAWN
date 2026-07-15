@@ -847,3 +847,35 @@ table.st { width: 100%; border-collapse: collapse; font-family: var(--mono); fon
   /* the banner's reveal animates a transform (scale); drop it so it snaps in */
   .raid-banner { transition: none !important; }
 }
+
+/* ============================================================================
+   JUICE — tactile feedback + micro-polish
+   Pure CSS on the existing markup. Most controls are real <button>s, but only a
+   handful had a press state, so most taps felt dead. Give every control the same
+   quick press-down + subtle hover lift, plus a keyboard focus ring. The buttons
+   that already define their own :active (.build, .act, .ob-go, …) keep it —
+   higher specificity wins. Everything animated here is off under reduced-motion.
+   ============================================================================ */
+button { transition: transform 0.09s ease, filter 0.14s ease; }
+button:not(:disabled):hover { filter: brightness(1.08); }
+button:not(:disabled):active { transform: translateY(1px); }
+button:disabled { cursor: default; }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Non-<button> tap targets (drawer rows / cards) get the same press-down feel. */
+.district:active,
+.cr-opt:active,
+.route:active,
+.mk-pledge:active,
+.puzzle-card:active { transform: translateY(1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none !important; }
+  button:not(:disabled):hover { filter: none; }
+  button:not(:disabled):active,
+  .district:active,
+  .cr-opt:active,
+  .route:active,
+  .mk-pledge:active,
+  .puzzle-card:active { transform: none; }
+}
