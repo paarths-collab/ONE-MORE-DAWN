@@ -1,0 +1,8 @@
+# Frontend-only judge demo of One More Dawn (see DEMO.md).
+# Point Netlify at this branch; it builds the static site into dist-demo/.
+[build]
+  command = "npm run build:demo"
+  publish = "dist-demo"
+
+[build.environment]
+  NODE_VERSION = "22"

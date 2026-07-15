@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:demo": "vite build --config vite.demo.config.mjs",
     "deploy": "npm run type-check && npm run lint && npm test && npm run test:client && npm run build && npm run size-check && devvit upload",
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish",

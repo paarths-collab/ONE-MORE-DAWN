@@ -1,3 +1,4 @@
+/* global __DEMO__ */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 // Self-hosted fonts: bundled by Vite as same-origin assets so they always load
@@ -11,7 +12,16 @@ import '@fontsource/jetbrains-mono/latin-500.css';
 import '@fontsource/jetbrains-mono/latin-700.css';
 import '@fontsource/jetbrains-mono/latin-800.css';
 import { App } from './App';
+import { DemoBanner } from './DemoBanner';
+import { installFrontendMock } from './frontendMock';
 import './styles.css';
+
+// Frontend-only judge demo: __DEMO__ is defined true only by vite.demo.config.mjs.
+// When set, patch fetch to answer /api/* from the in-browser mock BEFORE React
+// mounts (so App's first getInit() hits it), and show the "visual demo" notice.
+// In the real Devvit build __DEMO__ is undefined, so both are tree-shaken out.
+const IS_DEMO = typeof __DEMO__ !== 'undefined' && __DEMO__;
+if (IS_DEMO) installFrontendMock();
 
 // Last-resort error boundary: a WebGL-unavailable / GPU-blocklisted device makes
 // the renderer constructor throw during a commit-phase effect, which would
@@ -51,6 +61,7 @@ const container = document.getElementById('root');
 if (container)
   createRoot(container).render(
     <RootErrorBoundary>
+      {IS_DEMO && <DemoBanner />}
       <App />
     </RootErrorBoundary>,
   );
