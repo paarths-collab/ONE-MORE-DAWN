@@ -31,10 +31,11 @@ Open `http://127.0.0.1:4670/?showcase=1` at 1280×720 or 1920×1080. Press
 - `Space`: play or pause
 - `Left` / `Right`: previous or next scene
 - `Home`: restart
-- `D`: toggle clean capture mode
+- `D`: reveal or hide the director controls
 
-The top director strip also provides the same controls. Use the final round
-button to hide that strip before recording; the cinematic lower-third remains.
+The recording starts with no director strip, so the city stays unobstructed.
+Press `D` only when you need the on-screen edit controls; the cinematic
+lower-third remains.
 
 ## Recording notes
 

@@ -962,10 +962,10 @@ async function recordingShowcaseSmoke(url) {
     assert((await cdp.eval(`document.querySelector('.demo-start h1')?.textContent || ''`)).includes('ONE MORE DAWN'), 'The recording opens on the game title.');
     await cdp.eval(`document.querySelector('.demo-start button')?.click()`);
     await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts at the camp');
-    await cdp.eval(`document.querySelector('[aria-label="Pause demo"]')?.click()`);
+    await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))`);
 
     const nextScene = async (scene) => {
-      await cdp.eval(`document.querySelector('.demo-next')?.click()`);
+      await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))`);
       await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === ${JSON.stringify(scene)}`, `showcase advances to ${scene}`);
     };
 

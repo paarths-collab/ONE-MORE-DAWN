@@ -10,7 +10,9 @@ type DemoDirectorProps = {
 export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps) {
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [clean, setClean] = useState(false);
+  // Recording starts clean: playback is still controllable by keyboard, but no
+  // director strip blocks the Three.js city. Press D to reveal it while editing.
+  const [clean, setClean] = useState(true);
   const [index, setIndex] = useState(0);
   const scene = SHOWCASE_SCENES[index]!;
 
