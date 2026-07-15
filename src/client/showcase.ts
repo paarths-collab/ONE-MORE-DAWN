@@ -24,7 +24,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'One subreddit shares one city.',
     line: 'This is the loop: help today, face dawn together, then return to the consequence.',
     details: ['There is no private island.', 'Every player changes the same living map.'],
-    durationMs: 8000,
+    durationMs: 6000,
   },
   {
     id: 'growth',
@@ -32,7 +32,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'Accepted actions build the city for everyone.',
     line: 'Labor fills one communal build meter. When it reaches a threshold, a district appears in the Three.js city.',
     details: ['Your first accepted contribution gives you one permanent house.', 'The first contributor is remembered as the founder.'],
-    durationMs: 12000,
+    durationMs: 10000,
   },
   {
     id: 'shield',
@@ -40,7 +40,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'Daily participation becomes shared defense.',
     line: 'Each accepted city action adds to the shield reserve. At 12 points, it repairs the weakest of six dome panels.',
     details: ['Finish a daily challenge to charge one panel directly.', 'The raid tests the exact panel each fireball hits.'],
-    durationMs: 10000,
+    durationMs: 8000,
   },
   {
     id: 'raid',
@@ -48,7 +48,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'At dawn, the city is tested.',
     line: 'A healthy panel blocks a fireball. A depleted panel lets the strike reach the streets below.',
     details: ['Watch the six panels absorb or fail under each impact.', 'This raid breaches three panels. The result persists.'],
-    durationMs: 15000,
+    durationMs: 13000,
   },
   {
     id: 'aftermath',
@@ -56,7 +56,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'The city records the cost.',
     line: 'This breach lost six citizens and damaged u/quiet_marrow’s home. The city creates one shared rebuild queue.',
     details: ['Named houses do not disappear from the story.', 'Everyone sees what the raid damaged.'],
-    durationMs: 9000,
+    durationMs: 7000,
   },
   {
     id: 'rebuild',
@@ -64,7 +64,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'The next labor rebuilds a neighbor’s home.',
     line: 'One community contribution clears the next repair. Ownership and build order remain visible after the house returns.',
     details: ['Rebuilding is collective, not a private purchase.', 'The city heals without erasing its history.'],
-    durationMs: 9000,
+    durationMs: 7000,
   },
   {
     id: 'puzzle',
@@ -72,7 +72,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'The daily puzzle reconnects a district.',
     line: 'Turn conduits until power reaches every required building. The board validates the finished circuit before rewarding it.',
     details: ['A valid daily solve earns +3 standing once per player.', 'Puzzle standing and shield repair are separate systems.'],
-    durationMs: 12000,
+    durationMs: 10000,
   },
   {
     id: 'dawn',
@@ -80,7 +80,7 @@ export const SHOWCASE_SCENES: ShowcaseScene[] = [
     title: 'Dawn closes one day and opens the next.',
     line: 'The report keeps the raid, the rebuild, and your contribution visible. Then the world waits for tomorrow’s city.',
     details: ['The game remembers what happened.', 'Your subreddit returns together for one more dawn.'],
-    durationMs: 10000,
+    durationMs: 9000,
   },
 ];
 

@@ -24,6 +24,13 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     setPlaying(true);
   }, [onStartAudio, ready]);
 
+  // This is a recording reel, not an extra game mode: begin the moment the
+  // Three.js city is ready instead of putting a second CTA in front of it.
+  useEffect(() => {
+    if (!ready || started) return;
+    start();
+  }, [ready, start, started]);
+
   const move = useCallback((delta: number) => {
     setIndex((current) => Math.min(SHOWCASE_SCENES.length - 1, Math.max(0, current + delta)));
   }, []);
@@ -41,11 +48,6 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!started && (event.key === 'Enter' || event.code === 'Space')) {
-        event.preventDefault();
-        start();
-        return;
-      }
       if (!started) return;
       if (event.key === 'ArrowRight') move(1);
       else if (event.key === 'ArrowLeft') move(-1);
@@ -60,21 +62,9 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [move, start, started]);
+  }, [move, started]);
 
-  if (!started) {
-    return (
-      <div className="demo-start" data-showcase-ready={ready ? 'true' : 'false'}>
-        <div className="demo-start-k">A GUIDED STORY OF ONE SHARED CITY</div>
-        <h1>ONE MORE DAWN</h1>
-        <p>Build together. Endure the raid. Reconnect what remains.</p>
-        <button type="button" onClick={start} disabled={!ready}>
-          {ready ? '▶ START DEMO' : 'WAKING THE CITY…'}
-        </button>
-        <span>{ready ? 'music + sound enabled on start' : 'loading the Three.js city'}</span>
-      </div>
-    );
-  }
+  if (!started) return null;
 
   return (
     <div className={clean ? 'demo-director clean' : 'demo-director'} data-showcase-scene={scene.id}>

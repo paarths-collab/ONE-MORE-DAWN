@@ -178,70 +178,7 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 .dome-bar i { display: block; height: 100%; background: linear-gradient(90deg, #33c6e6, #7ff0ff); border-radius: 6px; transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 .dome-repair-meta { font-family: var(--mono); font-size: 8px; color: var(--mut); white-space: nowrap; }
 
-/* Local recording showcase. It is mounted only behind ?showcase=1 on localhost;
-   the actual game remains visible underneath every title and director control. */
-.demo-start {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 36px;
-  color: #fff4d0;
-  text-align: center;
-  background: rgba(19, 8, 6, 0.72);
-  backdrop-filter: blur(2px) saturate(0.85);
-}
-.demo-start::before,
-.demo-start::after {
-  content: '';
-  width: min(560px, 70vw);
-  height: 1px;
-  margin: 18px 0;
-  background: #d9a934;
-  box-shadow: 0 0 18px rgba(255, 180, 45, 0.65);
-}
-.demo-start-k {
-  font-family: var(--pixel);
-  font-size: 11px;
-  color: #f4cb55;
-}
-.demo-start h1 {
-  margin: 0;
-  max-width: 900px;
-  font-family: var(--pixel);
-  font-size: 58px;
-  line-height: 1.05;
-  color: #ffe28a;
-  text-shadow: 0 3px 0 #6e251b, 0 10px 35px rgba(255, 75, 25, 0.52);
-}
-.demo-start p {
-  margin: 0 0 22px;
-  font-family: var(--mono);
-  font-size: 16px;
-  color: #f4e8d3;
-}
-.demo-start button {
-  min-width: 230px;
-  min-height: 52px;
-  border: 2px solid #fff0b1;
-  border-radius: 6px;
-  background: #e7b72d;
-  color: #211006;
-  font-family: var(--pixel);
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: 0 5px 0 #7b4c0d, 0 12px 28px rgba(0, 0, 0, 0.38);
-}
-.demo-start button:disabled { opacity: 0.62; cursor: wait; }
-.demo-start > span {
-  margin-top: 13px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: #cbbda8;
-}
+/* Local recording showcase. It is mounted only behind ?showcase=1 on localhost. */
 .demo-director {
   position: fixed;
   inset: 0;
@@ -347,12 +284,6 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
 }
 
 @media (max-height: 500px) {
-  .demo-start { padding: 16px; }
-  .demo-start::before,
-  .demo-start::after { margin: 8px 0; }
-  .demo-start h1 { font-size: 36px; }
-  .demo-start p { margin-bottom: 12px; font-size: 12px; }
-  .demo-start button { min-width: 190px; min-height: 44px; }
   .demo-story { top: 72px; bottom: auto; left: 12px; width: 270px; padding: 9px 12px 10px; }
   .demo-story-k { font-size: 8px; }
   .demo-story-title { font-size: 15px; }

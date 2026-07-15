@@ -958,10 +958,8 @@ async function puzzleSmoke(url) {
 async function recordingShowcaseSmoke(url) {
   const { cdp, close } = await openPage(`${url}?showcase=1`);
   try {
-    await cdp.waitFor(`document.querySelector('.demo-start')?.getAttribute('data-showcase-ready') === 'true'`, 'recording showcase is ready');
-    assert((await cdp.eval(`document.querySelector('.demo-start h1')?.textContent || ''`)).includes('ONE MORE DAWN'), 'The recording opens on the game title.');
-    await cdp.eval(`document.querySelector('.demo-start button')?.click()`);
-    await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts at the camp');
+    await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts automatically at the camp');
+    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('One subreddit'), 'The recording opens by explaining the shared city.');
     await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))`);
 
     const nextScene = async (scene) => {

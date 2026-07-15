@@ -3805,7 +3805,7 @@ export function App() {
   // Background music track selection: raid-tension when a raid is imminent,
   // dawn-hope stinger on the dawn transition, otherwise the calm dusk theme.
   useEffect(() => {
-    if (mode !== 'live') return;
+    if (mode !== 'live' || showcaseEnabled) return;
     if (cityFallen) { stopMusic(); return; }
     if (liveRaidLikely || (raidDays >= 0 && raidDays <= 1)) {
       playTrack('raid');
@@ -3814,7 +3814,7 @@ export function App() {
     } else {
       playTrack('dusk');
     }
-  }, [mode, cityFallen, liveRaidLikely, raidDays, time]);
+  }, [mode, cityFallen, liveRaidLikely, raidDays, time, showcaseEnabled]);
   // Boolean state → the effect only re-fires on a real transition (no repeat on poll).
   useEffect(() => {
     if (cityFallen) playSound('city_fallen');
@@ -5111,11 +5111,11 @@ export function App() {
     setMutedUi(false);
     if (isMusicMuted()) toggleMusicMuted();
     setMusicMutedUi(false);
-    const volume = setMasterVolume(0.8);
+    const volume = setMasterVolume(0.95);
     setMasterVolumeUi(volume);
     refreshMusicVolume();
-    playTrack('dusk');
-    playSound('button_click');
+    playTrack('raid');
+    playSound('raid_warning');
   }, []);
 
   const applyShowcaseScene = useCallback(
@@ -5178,7 +5178,7 @@ export function App() {
         setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
         setRaidDays(6);
         handleRef.current?.focusOverview();
-        playTrack('dawn');
+        playTrack('raid');
         return;
       }
 
@@ -5188,7 +5188,7 @@ export function App() {
         setLiveReconstruction(EMPTY_RECONSTRUCTION);
         setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
         handleRef.current?.focusOverview();
-        playTrack('dusk');
+        playTrack('raid');
         const steps = [0, 1, 2, 3, 4, 5, 7];
         steps.forEach((count, index) => {
           later(index * 850, () => {
@@ -5255,7 +5255,7 @@ export function App() {
           setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
           setLiveHouses(aftermathHouses);
           setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
-          showEpic('THE WALL WAS BREACHED', '3 fireballs pierced · 6 souls lost');
+          showEpic('THE SHIELD WAS BREACHED', '3 fireballs pierced the dome · 6 souls lost');
         });
         return;
       }
@@ -5285,7 +5285,7 @@ export function App() {
         setLiveHouses(aftermathHouses);
         setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
         handleRef.current?.focusOverview();
-        playTrack('dusk');
+        playTrack('raid');
         later(900, () => {
           handleRef.current?.rebuildHouse(6);
           playSound('rebuild_done');
@@ -5306,7 +5306,7 @@ export function App() {
         setLiveHouses(showcaseHouses(132));
         setLiveReconstruction(EMPTY_RECONSTRUCTION);
         setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
-        playTrack('dusk');
+        playTrack('raid');
         later(650, () => {
           setPuzzleBusy(true);
           setPuzzleBanner(null);
@@ -5364,7 +5364,7 @@ export function App() {
       setDawnReport(report);
       setDawnOpen(true);
       handleRef.current?.focusOverview();
-      playTrack('dawn');
+      playTrack('raid');
       playSound('dawn_report');
       later(4000, () => {
         setDawnOpen(false);

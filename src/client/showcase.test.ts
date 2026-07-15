@@ -15,7 +15,7 @@ describe('recording showcase gate', () => {
     expect(SHOWCASE_SCENES.map((scene) => scene.id)).toEqual([
       'camp', 'growth', 'shield', 'raid', 'aftermath', 'rebuild', 'puzzle', 'dawn',
     ]);
-    expect(SHOWCASE_DURATION_MS).toBe(85_000);
+    expect(SHOWCASE_DURATION_MS).toBe(70_000);
   });
 
   it('uses a valid tap sequence for the real puzzle board', () => {
