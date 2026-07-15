@@ -37,80 +37,83 @@ export type ShowcaseScene = {
  * Local-only recording sequence. Every beat points at a real system in the
  * shipped game; this is a guided camera path, not an alternate game mode.
  */
+// Durations tuned for a snappy ~47s hands-free run (the director loops, so it
+// never looks "done"). storyDelayMs on the raid holds the title until the
+// cinematic breach has landed.
 export const SHOWCASE_SCENES: ShowcaseScene[] = [
-  { id: 'opening', durationMs: 4000 },
+  { id: 'opening', durationMs: 2500 },
   {
     id: 'camp',
     eyebrow: '01 · THE CAMP',
     title: 'EVERY CITY STARTS WITH NOTHING.',
     line: 'One fire. One refuge. One subreddit trying to survive another dawn.',
-    durationMs: 6000,
+    durationMs: 3500,
   },
   {
     id: 'roles',
     eyebrow: '02 · YOUR ROLE',
     title: 'CHOOSE HOW YOU SERVE THE CITY.',
     line: 'Six roles. Different strengths. One shared survival.',
-    durationMs: 7000,
+    durationMs: 3800,
   },
   {
     id: 'contribute',
     eyebrow: '03 · FIRST CONTRIBUTION',
     title: 'ONE REDDITOR. ONE HOUSE.',
     line: 'Add labor. Your first home joins the city, in contribution order.',
-    durationMs: 8000,
+    durationMs: 4200,
   },
   {
     id: 'growth',
     eyebrow: '04 · CITY GROWTH',
     title: 'BUILT TOGETHER. DAWN BY DAWN.',
     line: 'Camp becomes Shelter, Farm, Clinic, Watchtower, Storehouse, and Council Hall.',
-    durationMs: 8000,
+    durationMs: 4500,
   },
   {
     id: 'decide',
     eyebrow: '05 · COMMUNITY CHOICES',
     title: 'DISCUSS. VOTE. DECIDE.',
     line: 'Crisis vote, Council strategy, The Marked, and Reddit discussion all shape the same city.',
-    durationMs: 10000,
+    durationMs: 5000,
   },
   {
     id: 'warning',
     eyebrow: '06 · RAID WARNING',
     title: 'THE RAID ARRIVES AT DAWN.',
     line: 'Six dome panels are all that stand between the city and the fire.',
-    durationMs: 5000,
+    durationMs: 3000,
   },
   {
     id: 'raid',
     eyebrow: '07 · THE RAID',
     title: 'THE DOME WAS BREACHED.',
     line: 'Three fireballs pierced the shield. The city pays the price together.',
-    durationMs: 11000,
-    storyDelayMs: 6200,
+    durationMs: 6500,
+    storyDelayMs: 3400,
   },
   {
     id: 'rebuild',
     eyebrow: '08 · REBUILDING',
     title: 'NO CITIZEN REBUILDS ALONE.',
     line: 'A fallen home becomes the city’s next shared labor.',
-    durationMs: 9000,
+    durationMs: 4500,
   },
   {
     id: 'puzzle',
     eyebrow: '09 · DAILY PUZZLE',
     title: 'RECONNECT THE CITY.',
     line: 'Turn conduits, relight the Clinic, and earn +3 standing.',
-    durationMs: 9000,
+    durationMs: 4500,
   },
   {
     id: 'dawn',
     eyebrow: '10 · DAWN REPORT',
     title: 'THE CITY REMEMBERS.',
     line: 'Dawn records what was built, lost, and saved.',
-    durationMs: 6000,
+    durationMs: 3500,
   },
-  { id: 'end', durationMs: 5000 },
+  { id: 'end', durationMs: 3500 },
 ];
 
 export const SHOWCASE_DURATION_MS = SHOWCASE_SCENES.reduce((total, scene) => total + scene.durationMs, 0);
@@ -124,6 +127,13 @@ export const showcaseSceneFromSearch = (search: string): ShowcaseSceneId => {
 // ?autoplay=0 for frame-by-frame manual stepping.
 export const showcaseAutoplayFromSearch = (search: string): boolean =>
   new URLSearchParams(search).get('autoplay') !== '0';
+
+// Playback pace. Base durations give a snappy ~47s FAST run at speed 1; pass
+// ?speed=0.5 for the ~94s SLOW cinematic pace, or ?speed=2 for a ~24s teaser.
+export const showcaseSpeedFromSearch = (search: string): 0.5 | 1 | 2 => {
+  const raw = Number(new URLSearchParams(search).get('speed'));
+  return raw === 0.5 || raw === 2 ? raw : 1;
+};
 
 export const showcaseCleanCaptureFromSearch = (search: string): boolean =>
   new URLSearchParams(search).get('clean') === '1';

@@ -4,6 +4,7 @@ import {
   showcaseAutoplayFromSearch,
   showcaseCleanCaptureFromSearch,
   showcaseSceneFromSearch,
+  showcaseSpeedFromSearch,
   type ShowcaseSceneId,
 } from './showcase';
 
@@ -27,7 +28,9 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     showcaseCleanCaptureFromSearch(window.location.search),
   );
   const [hideCursor, setHideCursor] = useState(false);
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(() =>
+    showcaseSpeedFromSearch(window.location.search),
+  );
   const [index, setIndex] = useState(() =>
     SHOWCASE_SCENES.findIndex((entry) => entry.id === showcaseSceneFromSearch(window.location.search)),
   );
@@ -67,8 +70,13 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
   }, [onScene, playing, scene.id, scene.storyDelayMs, speed, started]);
 
   useEffect(() => {
-    if (!started || !playing || index >= SHOWCASE_SCENES.length - 1) return undefined;
-    const timer = window.setTimeout(() => setIndex((current) => current + 1), scene.durationMs / speed);
+    if (!started || !playing) return undefined;
+    // Loop: after the end card, roll back to the opening so the demo runs forever
+    // hands-free (record any full cycle, then trim).
+    const timer = window.setTimeout(
+      () => setIndex((current) => (current >= SHOWCASE_SCENES.length - 1 ? 0 : current + 1)),
+      scene.durationMs / speed,
+    );
     return () => window.clearTimeout(timer);
   }, [index, playing, scene.durationMs, speed, started]);
 

@@ -22,7 +22,8 @@ describe('recording showcase gate', () => {
     expect(SHOWCASE_SCENES.map((scene) => scene.id)).toEqual([
       'opening', 'camp', 'roles', 'contribute', 'growth', 'decide', 'warning', 'raid', 'rebuild', 'puzzle', 'dawn', 'end',
     ]);
-    expect(SHOWCASE_DURATION_MS).toBe(88_000);
+    // Fast pace (speed 1) ~49s; ?speed=0.5 stretches it to the ~98s slow cut.
+    expect(SHOWCASE_DURATION_MS).toBe(49_000);
   });
 
   it('opens a clean Camp capture by default and accepts only known scene keys', () => {
