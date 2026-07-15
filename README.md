@@ -27,6 +27,26 @@ next raid.
 
 > Build together today. Face dawn together. Rebuild together tomorrow.
 
+## How a subreddit gets its own city
+
+One More Dawn is designed around a simple rule: **one subreddit, one city**.
+
+1. A subreddit moderator adds the Devvit app to their community.
+2. From the moderator menu, they choose **One More Dawn: create game post**.
+3. That post becomes the entry point to the subreddit’s shared city.
+4. The first visit creates a fresh Camp for that subreddit. Contributors then
+   build it together, one dawn at a time.
+
+Every One More Dawn post in the **same subreddit** reads the same city, day,
+resources, contributors, and history. A game post in a **different subreddit**
+starts with a separate Camp and an independent city story. The World view is the
+only place those cities meet: it compares their public city status without
+merging their gameplay state.
+
+For moderators, the app also provides protected menu actions to create or repair
+the City Chatter Hub, seed a judge-friendly demo city, force-resolve a day during
+testing, and reset a city into a new cycle.
+
 ## How to play
 
 ### 1. Enter the shared city
@@ -119,6 +139,18 @@ is directed toward reconstruction. If a city falls entirely, **Phoenix Dawn**
 begins a new Camp cycle while preserving long-term identity, titles, streaks,
 and lifetime standing.
 
+## A player's first week
+
+| Moment | What the player sees | Why it matters |
+|---|---|---|
+| First visit | An empty Camp, city vitals, a role choice, and the approaching dawn | The player immediately understands that the city is fragile and shared. |
+| First action | A food, power, medicine, defense, or labor contribution | The player helps once without needing a real-time team. |
+| First contribution | Their house appears in first-contribution order | Participation becomes visible and personal. |
+| First decision | A crisis choice, Council plan, or Marked pledge | The player sees that the city has competing priorities, not just resource bars. |
+| First dawn | A Dawn Report, changed resources, and a raid outcome | The player learns that yesterday's community choices had consequences. |
+| After damage | A neighbor's damaged home and a reconstruction target | The player sees that recovery is collective, not a solo grind. |
+| Return visits | New buildings, city history, standing, and a changing skyline | The city rewards returning because it visibly remembers participation. |
+
 ## More ways to participate
 
 - **Reconnect the City** is a daily tile-rotation puzzle. Restore the damaged
@@ -139,6 +171,36 @@ visible in a shared world.
 - Real Reddit discussion can support in-game strategy through City Chatter.
 - A contributor's house makes their participation visible to the whole community.
 - The city remembers consequences long after a single visit ends.
+
+## Judge quick tour
+
+One More Dawn is built to show its core idea quickly, without requiring a large
+group of people to be online at once.
+
+1. Open the game post and show the Camp, role selection, city vitals, and daily
+   action bar.
+2. Make a contribution so the player’s house and the shared city stakes are
+   clear.
+3. Open the LIVE panel to show the crisis, Council strategy, The Marked, and
+   Reddit-connected City Chatter.
+4. Use the moderator-only **seed demo state** menu action to show a populated
+   city, houses, civic buildings, the dome, and community progress.
+5. Use **force-resolve day** during a controlled demo to show the raid result,
+   Dawn Report, consequences, and reconstruction.
+6. Open World or Top to show that separate subreddit cities can be compared
+   without losing their independent histories.
+
+This demonstrates the project’s central qualities:
+
+- **A memorable hook:** one community is responsible for one city’s next dawn.
+- **Reddit-native participation:** a real subreddit shares state and can discuss
+  strategy through Reddit comments.
+- **Visible consequences:** houses, buildings, dome state, damage, and recovery
+  all appear in the Three.js city.
+- **Asynchronous social play:** every contribution matters even when players do
+  not arrive at the same time.
+- **Reliable shared systems:** daily limits, votes, pledges, house ownership, and
+  dawn resolution are server-validated.
 
 ## Architecture
 

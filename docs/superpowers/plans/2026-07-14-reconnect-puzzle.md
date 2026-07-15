@@ -1,5 +1,8 @@
 # Plan: "Reconnect the City" — daily tile-rotation puzzle
 
+> **Historical implementation plan.** The shipped puzzle behavior should be
+> verified against the current client and server routes before making claims.
+
 Locked contract. The shared ENGINE is DONE and tested — do not change it. Each
 lane below builds against it in isolated files. The integrator (me) wires the
 board into the app, the client API, the dev mock, and the smoke test.

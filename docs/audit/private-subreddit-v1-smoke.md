@@ -119,7 +119,7 @@ checks below **inside that post's webview**.
 | Run mod menu **"seed demo state"** | A populated mid-run city loads | [ ] |
 | Run mod menu **"force-resolve day"** | Day advances; a **Dawn Report** is available | [ ] |
 | Open the Dawn Report | Yesterday's summary + your personal impact | [ ] |
-| Resolve a raid dawn | A clear **THE WALL HELD** or **THE WALL WAS BREACHED** payoff appears | [ ] |
+| Resolve a raid dawn | A clear dome-held or dome-breached payoff appears, followed by the matching report/aftermath | [ ] |
 
 ## 10. World view
 

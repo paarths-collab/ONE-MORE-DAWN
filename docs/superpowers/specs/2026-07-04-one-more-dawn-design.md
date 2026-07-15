@@ -1,5 +1,9 @@
 # One More Dawn — Design Spec
 
+> **Historical product spec.** This file records the original Phaser direction.
+> The live game is Three.js + React; use `README.md` and `docs/V1_SCOPE.md` for
+> current player and launch information.
+
 **Date:** 2026-07-04
 **Target:** Reddit's Games with a Hook Hackathon (Devpost)
 **Real deadline:** Wed Jul 15, 2026, 6:00pm PDT (Thu Jul 16, 6:30am IST)

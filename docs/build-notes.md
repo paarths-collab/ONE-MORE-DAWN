@@ -1,5 +1,10 @@
 # Build Notes — lessons for agents working in this repo
 
+> **Engineering history.** These notes preserve discoveries from earlier
+> iterations. Confirm player-facing behavior against [`../README.md`](../README.md)
+> and [`V1_SCOPE.md`](V1_SCOPE.md) before turning a note into current
+> documentation.
+
 One lesson per bullet. Update rather than duplicate; delete if proven wrong.
 
 ## Environment

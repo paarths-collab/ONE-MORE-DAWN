@@ -1,5 +1,8 @@
 # One Redditor, One House — V1 Design
 
+> **Historical design record.** The feature is implemented; validate details
+> against the current source and V1 scope before using this file in public copy.
+
 > Status: **approved for V1** (2026-07-09). Post-launch we iterate per real users.
 > The city literally *is* the subreddit made visible: every contributor is a house.
 

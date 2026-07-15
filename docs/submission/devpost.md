@@ -1,187 +1,193 @@
-# Devpost Submission Draft — One More Dawn
+# Devpost Submission — One More Dawn
 
-Copy-paste ready. Reflects the current V1 build (Devvit Web + Three.js + React).
-Update the video URL and playtest subreddit URL before submitting.
+Copy-paste this file into Devpost's **About the project** field. Replace the
+two link placeholders after the real Reddit playtest and final video are ready.
 
----
+## Tagline
 
-## Tagline (max 200 chars)
+A cooperative Reddit survival game where one community builds, protects, and
+remembers one shared city - one dawn at a time.
 
-A cooperative survival-strategy game where your subreddit keeps the last city alive — one dawn at a time.
+## Elevator pitch
 
----
-
-## Elevator pitch (short paragraph)
-
-One More Dawn is a cooperative survival-strategy game where each subreddit
-builds one shared city after collapse. Players gather resources, pledge to
-save the Marked, vote on moral crises, back a council strategy, and raise
-personal houses in first-contribution order. Everyone wants the city to survive
-— but not everyone agrees what kind of city it should become.
-
----
+One More Dawn is an asynchronous survival-strategy game where every subreddit
+builds one persistent city. Players take limited daily actions, vote on crises,
+back a Council strategy, pledge to protect The Marked, and raise their own house
+through contribution. At dawn, the city lives with the consequences together.
 
 ## Inspiration
 
-We wanted a game that treats a subreddit as a real place rather than a login
-provider. One More Dawn creates a weekly City Chatter Hub where the community
-debates strategy in real Reddit comments, then turns each member's binding
-in-game actions, votes, pledges, and personal house into shared city state. Frostpunk-style resource pressure, filtered through a
-subreddit's daily rhythm, resolved async so nobody has to be online at the
-same time.
+I kept thinking about what a subreddit really is.
 
-The design brief was simple: not a mini-game, a subreddit-scale strategy
-simulation.
+It is not just a comment section. It is a place where strangers become regulars,
+arguments become traditions, and small acts of help slowly turn into a shared
+identity.
 
----
+I wanted to make that history visible.
+
+So I imagined a city at the edge of the last safe dawn: almost empty,
+underprepared, and waiting for people who may never meet in real time to decide
+whether it deserves to survive.
+
+That became **One More Dawn**.
+
+In this game, a subreddit does not receive a finished kingdom. It starts with a
+vulnerable Camp. One person grows food, another restores power, another treats
+the sick, another strengthens the city's defenses, and another makes a difficult
+vote. Bit by bit, those actions become homes, roads, lights, civic buildings,
+and memories.
+
+Then dawn comes.
+
+And the city has to live with what its people chose.
+
+> Every subreddit builds one city. Every dawn asks whether it was enough.
 
 ## What it does
 
-- One real day is one game day. The city is per-subreddit and persistent:
-  every post in a subreddit shows that subreddit’s same shared city.
-- **The Marked** — a named survivor or landmark in danger tonight. Anyone can
-  save it with **one tap** (no energy needed): the lurker path into the game.
-- A daily **crisis vote** with visible tradeoffs and a **council plan** strategy
-  vote — one each per player per day, locked once cast.
-- Three **energy** points a day on city actions — Grow Food, Repair Power, Treat
-  Sick, Guard Wall, or add labor toward the next shared building.
-- A stable daily **personal mission**, 100 contribution levels, return streaks,
-  and a standing-cost **Rekindle** option when a hard-earned streak lapses.
-- **One redditor, one house** — the first accepted contribution raises your
-  house in first-contribution order; the first contributor is the founder.
-- **Six roles** (Scout, Engineer, Medic, Farmer, Guard, Speaker) with a 3-day
-  change cooldown; each earns its own **title** track and raises a faction's
-  voice (Speakers also lift morale), plus contribution rank.
-- A **survivor identity** — choose a role and name your survivor so every
-  masked redditor has a place in the city.
-- The **Dawn Report** on the first visit each day: yesterday's city summary plus
-  your personal impact. This is the "come back tomorrow" hook.
-- A **living 3D town** that shifts with the city's mood, **vitals** that flash on
-  change, and raid pressure that reddens as danger nears.
-- A **live drama feed**, a permanent **timeline**, and a **World of Cities** map
-  ranking participating subreddits against each other.
-- A real weekly **City Chatter Hub**: daily Strategy, Raid, Rebuilding, and
-  General prompts whose Reddit replies appear in the LIVE panel. Posting is an
-  optional, disclosed Reddit action; binding votes remain in the game.
-- **Phoenix Dawn**: a fallen city starts a new cycle as a Camp while preserving
-  long-term identity, titles, and contribution history.
-- Server-side faction pressure from what players do, with richer law display
-  intentionally left for post-V1.
-- A mod-only admin menu with **force-resolve**, **reset**, and a rich
-  **seed-demo** that spins up a judge-ready mid-run city.
+**One More Dawn** is an asynchronous community survival game built for Reddit.
 
----
+Each subreddit shares one persistent city. There are no private islands or
+separate kingdoms. Everyone contributes to the same settlement, sees the same
+shortages, makes decisions that affect the same future, and returns to see what
+the community survived together.
+
+Players choose a survivor role: Scout, Engineer, Medic, Farmer, Guard, or
+Speaker. Each day, they use limited energy on food, power, medicine, defense,
+and shared construction labor.
+
+A Redditor's first accepted contribution creates their house in the Three.js
+city. The first contributor becomes the founder. As more people participate, the
+Camp grows into a settlement with homes, shared buildings, roads, defenses, and
+a protective dome.
+
+The community can also:
+
+- vote in a daily crisis;
+- back a Council strategy;
+- pledge to protect The Marked;
+- contribute labor to shared construction; and
+- discuss strategy through Reddit-connected City Chatter.
+
+At dawn, the server resolves the day. A raid may strike the protective dome,
+damage homes, or be held back by preparation. Damaged homes remain part of the
+city and stay connected to their owners. Future community labor helps rebuild
+them.
+
+$$
+\text{Contributions}
+\rightarrow
+\text{Preparation}
+\rightarrow
+\text{Community Decisions}
+\rightarrow
+\text{Raid at Dawn}
+\rightarrow
+\text{Consequences}
+\rightarrow
+\text{Rebuilding}
+$$
+
+I also built **Reconnect the City**, a daily tile-rotation puzzle where players
+restore power through a damaged district network for personal Standing.
 
 ## How we built it
 
-- **Devvit Web** app running inside Reddit posts (`@devvit/web` 0.13).
-- **Three.js + React 18 + TypeScript + Vite 8** for the town and HUD — a
-  mobile-first pixel command console (`exactOptionalPropertyTypes: true`, strict
-  throughout). We chose React deliberately: this is an async community strategy
-  *dashboard*, with Three.js carrying the living town.
-- **Self-hosted fonts** (Silkscreen + JetBrains Mono via `@fontsource`), bundled
-  same-origin so the pixel aesthetic survives the Devvit webview CSP.
-- **Hono 4** for server endpoints under `/api/`.
-- **Devvit Redis** for all persistent state — hashes for city and players,
-  sorted sets for leaderboards, per-day hash keys for action/vote/pledge
-  tallies, and `redis.global` for the cross-subreddit World map. No lists
-  (Devvit Redis does not support them).
-- **Lazy day resolver** under an NX lock — no cron. The first request after
-  midnight UTC resolves the previous day.
-- **Optimistic-concurrency** energy spend and vote lock-in via watch/multi/exec.
-- Automated tests and browser smoke coverage for the V1 loop, including a
-  full-loop integration proof and property tests that drive the store and pure
-  game logic end-to-end.
+I built One More Dawn as a Devvit Web application that runs inside Reddit.
 
----
+The frontend uses React, TypeScript, Vite, and Three.js. React manages
+onboarding, daily actions, voting, City Chatter, the puzzle, Dawn Reports, World,
+and Top views. Three.js renders the city: houses, shared buildings, day and night
+states, the protective dome, raid effects, damage, and reconstruction.
+
+The backend uses Devvit, Hono, TypeScript, Devvit Redis, and Reddit APIs. Redis
+stores city state, player profiles, roles, resources, labor, houses, votes,
+pledges, raid outcomes, damage, puzzle completion, and city history.
+
+I made important actions deterministic and server-validated so a shared city
+cannot be changed accidentally by duplicate requests.
+
+$$
+\text{Accepted Action}
+=
+\text{Valid Input}
+\land
+\text{Eligible Player}
+\land
+\neg \text{Duplicate Action}
+$$
+
+Idempotent house registration, per-player daily limits, vote and pledge locks,
+safe Redis parsing, and deterministic dawn resolution keep the city consistent
+when many Redditors participate.
 
 ## Challenges we ran into
 
-**Devvit transaction semantics were quietly wrong in our first pass.**
-`tx.exec()` is typed `Promise<any[]>` and never returns null — the conflict
-signal is a caught throw or an empty result array, not a null return. Our
-original `exec() === null` guard was dead code; conflicts were being
-silently ignored. Discovered by reading the actual
-`@devvit/redis/RedisClient.js` sources and fixed with conflict-aware
-transaction guards: an `execOrConflict` helper on the mission path and a
-shared `beginUserLock` watch/multi/exec wrapper on every per-player
-mutation route (`/action`, `/vote`, `/strategy`, `/pledge`, `/rekindle`).
+The hardest challenge was making asynchronous multiplayer feel emotional.
 
-**Async multiplayer without websockets.** Devvit Web doesn't support them
-and the runtime is request/response only. We made the resolver the ONLY
-writer of state transitions, lazy-triggered on any request, gated by a
-short-TTL NX lock so two concurrent visitors can't fork the day.
+Redditors do not need to be online at the same moment. One person may help in the
+morning, another may vote later that night, and someone else may return after
+dawn to discover what happened.
 
-**Crisis-picker orbit collapse.** Our first picker was a linear stride
-`(day * 7 + cycle * 13) % pool.length`. Under the no-repeat rule, it
-degenerated to a 3-crisis loop within a week — a subreddit would see the
-same three crises forever. Replaced with a seeded PRNG so consecutive days
-decorrelate. Now covered by a "no short-orbit lock-in" regression test.
+I could not depend on a real-time lobby. Instead, I designed the game around
+returning: help today, leave a visible mark on the city, and come back to see how
+everyone's choices became a shared consequence.
 
-**Balance that scales with subreddit size.** Initial constants worked for
-3–5 players but any larger subreddit had zero scarcity, because drains
-were population-linear while production was player-linear. Retuned to add
-per-active-player drain terms so a 20-player subreddit still faces real
-food and power pressure.
+I also had to make ownership fair. Giving every contributor a house made the city
+personal, but losing that house in a raid could feel cruel. I preserved ownership
+after damage and made reconstruction a collective responsibility.
 
----
+Building inside a Reddit webview added practical challenges too: performance,
+mobile landscape layout, responsive UI, persistent Redis state, Reddit
+permissions, and real comment attribution.
 
 ## Accomplishments that we're proud of
 
-- A focused V1 survival loop — CI-green with automated tests, including a
-  full-loop end-to-end proof (role → actions → votes → day rollover) and
-  property tests.
-- A React UI that reads like a *place*: a living skyline, a one-tap pledge, a
-  Dawn Report, and a survivor you build yourself — all crisp on mobile.
-- Reddit-native hook that doesn't feel bolted on: daily actions, votes, pledges,
-  and houses all come from real contributors, and the whole subreddit shares the
-  consequences.
-- Deterministic, replayable resolver — retries can't fork reality.
-- Ships CSP-clean: fonts self-hosted, no external requests, no inline scripts.
+I am proud that the city is not merely decorative. It remembers.
 
----
+- A house means someone contributed.
+- A shared building means people worked together.
+- The protective dome means the city prepared.
+- Damage means dawn had a cost.
+- Reconstruction means the community did not leave someone behind.
+- The Dawn Report turns those events into shared history.
+
+I am especially proud of the one-redditor-one-house system. A Redditor's first
+accepted contribution gives them a visible place in the city. When that place is
+damaged, the city gives everyone else a reason to care.
 
 ## What we learned
 
-- Reddit's async pattern is a design constraint that becomes a design
-  feature. Players return tomorrow to see collective consequences, which
-  is more compelling than any "one-more-turn" solo loop.
-- Adversarial audits catch what unit tests miss. Our review pass surfaced
-  the dead conflict check, the orbit-collapsing crisis picker, and a
-  scarcity-vanishing balance issue — none of which had a failing test
-  until we wrote one.
-- Devvit's platform is closer to "serverless + shared kv" than a game
-  runtime. Once you accept that, the design ideas that survive are the
-  ones that lean into async and shared state.
+I learned that multiplayer does not need to be real-time to feel alive.
 
----
+It needs memory. Players need to see that their actions remained after they left,
+that other people changed the same world, and that there is a reason to return
+after dawn.
+
+I learned that Reddit's asynchronous rhythm is not only a constraint. It can be
+the foundation of the experience. Reddit communities already return, react,
+debate, remember, and build culture over time. One More Dawn turns that rhythm
+into a survival story.
 
 ## What's next for One More Dawn
 
-- Deeper comment integration for event summaries after V1.
-- A cohesive custom icon set to replace the remaining emoji.
-- Marked portrait art with saved/lost states.
-- City-vs-city Olympics season mode on top of the World map.
-- Larger crisis pool and richer law effects.
+I want One More Dawn to grow with the communities that play it: more daily puzzle
+levels, deeper role progression, richer city stages, varied raid outcomes, and
+long-term city chronicles.
 
----
+Two subreddits may begin with the same empty Camp. After enough dawns, they
+should not look alike.
+
+> Not just a city-builder. A shared story that a community earns, loses,
+> repairs, and remembers together.
 
 ## Built With
 
-Devvit, Devvit Web, Devvit Redis, **React**, Three.js, TypeScript, Hono, Vite,
-`@fontsource`, Node.js 22.
-
----
+Devvit, Devvit Web, Reddit API, Devvit Redis, React, Three.js, TypeScript,
+Node.js, Hono, Vite, Vitest, HTML, CSS, and WebGL.
 
 ## Try it out
 
-- [GitHub repo](https://github.com/paarths-collab/reddit-game)
-- Playtest link: [TBD — subreddit URL after publishing]
-- Demo video: [TBD]
-
----
-
-## Video pitch (under 1 min)
-
-See `docs/submission/video-script.md` in the repo for the shot list and
-narration.
+- [GitHub repository](https://github.com/paarths-collab/reddit-game)
+- Playable Reddit post: **add the real post URL after playtest**
+- Demo video: **add the unlisted YouTube URL after export**

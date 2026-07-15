@@ -1,4 +1,10 @@
-# One More Dawn — Asset & Audio Manifest
+# Historical Asset Wishlist — Pre-Three.js Prototype
+
+> **Historical reference, not a V1 contract.** This pre-Three.js wishlist
+> describes an earlier Phaser-based prototype and proposed audio pipeline. The
+> shipped client is Three.js + React; current audio assets and licenses are in
+> [`../ATTRIBUTION.md`](../ATTRIBUTION.md), and player-facing scope is in
+> [`../V1_SCOPE.md`](../V1_SCOPE.md).
 
 The complete list of art, backgrounds, sound effects, and music the game needs,
 tied to the real screens and events, with delivery constraints and a prioritised

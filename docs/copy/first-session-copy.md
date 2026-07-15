@@ -40,7 +40,7 @@ houses and the leaderboard.)
 Show once, after entering. Each is one short card with a "GOT IT" / "NEXT" button.
 
 1. **This is your city.** `Everyone in this subreddit shares one city. What you do adds up.`
-2. **One action a day.** `Spend your energy on the wall or the fields. It lands at the next dawn.`
+2. **Three chances before dawn.** `Spend your energy on food, power, care, defense, or shared labor.`
 3. **Decide together.** `Vote on the crisis, back a plan, pledge to save The Marked. Then come back at dawn.`
 
 **Final coachmark CTA:** `START`
@@ -49,7 +49,7 @@ Show once, after entering. Each is one short card with a "GOT IT" / "NEXT" butto
 
 - **Daily action (hotbar):**
   - Section label: `DAWN ACTIONS`
-  - Helper: `One of each per day. Your work lands at the next dawn.`
+  - Helper: `Spend your energy before dawn. Your work lands at the next dawn.`
   - Disabled (already used): `✓ done today`
   - Disabled (no energy): `out of energy — back at dawn`
   - Energy pill tooltip: `Energy left today`
@@ -71,7 +71,7 @@ Show once, after entering. Each is one short card with a "GOT IT" / "NEXT" butto
 - **Raid countdown:**
   - Label: `RAID WATCH`
   - Countdown: `Raid in {n} dawns` / `RAID AT NEXT DAWN`
-  - Helper: `Guard the Wall to soften the blow.`
+  - Helper: `Strengthen the city's defenses before dawn.`
   - Forecast active: `⚠ The forecast says raiders move at dawn.`
 
 - **Dawn Report teaser:**

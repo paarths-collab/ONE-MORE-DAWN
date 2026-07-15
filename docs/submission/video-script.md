@@ -32,9 +32,10 @@ Narration: "Every Redditor gets one house. Together, their labor turns an empty 
 
 **0:35-0:47 - Dawn payoff**
 
-[Force-resolve from the mod menu. Show the wall-held or wall-breached banner, Dawn Report, and unlocked building.]
+[Force-resolve from the mod menu. Show the dome-held or dome-breached outcome,
+the Dawn Report, affected homes if present, and an unlocked building.]
 
-Narration: "At dawn the server resolves every action. The wall holds, breaks, or the city falls, and the chronicle remembers why."
+Narration: "At dawn the server resolves every action. The dome holds or is breached, the city carries the consequence, and the chronicle remembers why."
 
 **0:47-0:55 - Retention close**
 
