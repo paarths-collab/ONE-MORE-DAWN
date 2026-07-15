@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { MAREN_COLORS, MAREN_PATHS } from './advisorSprite';
 import {
   SHOWCASE_SCENES,
   showcaseAutoplayFromSearch,
@@ -7,6 +8,41 @@ import {
   showcaseSpeedFromSearch,
   type ShowcaseSceneId,
 } from './showcase';
+
+// Young Maren, the city's lantern-keeper — a compact head-and-shoulders pixel
+// portrait so she visibly narrates each showcase scene.
+function MarenNarrator({ talking }: { talking: boolean }) {
+  return (
+    <span className={`demo-maren${talking ? ' talking' : ''}`} aria-hidden="true">
+      <svg viewBox="15 20 42 52" width="54" height="66">
+        <g strokeLinecap="round" strokeLinejoin="round">
+          <path d={MAREN_PATHS.cloak} fill={MAREN_COLORS.cloakDark} stroke={MAREN_COLORS.outline} strokeWidth="1.5" />
+          <path d={MAREN_PATHS.cloakPanel} fill={MAREN_COLORS.cloak} />
+          <path d={MAREN_PATHS.ponytail} fill={MAREN_COLORS.hairDark} stroke={MAREN_COLORS.outline} strokeWidth="1.3" />
+          <path d={MAREN_PATHS.hairBack} fill={MAREN_COLORS.hairDark} stroke={MAREN_COLORS.outline} strokeWidth="1.4" />
+          <path d={MAREN_PATHS.neck} fill={MAREN_COLORS.skinShadow} stroke={MAREN_COLORS.outline} strokeWidth="1" />
+          <path d={MAREN_PATHS.face} fill={MAREN_COLORS.skin} stroke={MAREN_COLORS.outline} strokeWidth="1.25" />
+          <path d={MAREN_PATHS.faceLight} fill={MAREN_COLORS.skinLight} opacity="0.28" />
+          <path d={MAREN_PATHS.fringe} fill={MAREN_COLORS.hair} stroke={MAREN_COLORS.outline} strokeWidth="1.25" />
+          <path d={MAREN_PATHS.sideLock} fill={MAREN_COLORS.hairDark} stroke={MAREN_COLORS.outline} strokeWidth="1.1" />
+          <path d={MAREN_PATHS.leftBrow} fill="none" stroke={MAREN_COLORS.hairDark} strokeWidth="1.4" />
+          <path d={MAREN_PATHS.rightBrow} fill="none" stroke={MAREN_COLORS.hairDark} strokeWidth="1.4" />
+          <g className="co-eyes">
+            <path d={MAREN_PATHS.leftEye} fill={MAREN_COLORS.eyeWhite} stroke={MAREN_COLORS.outline} strokeWidth="0.65" />
+            <path d={MAREN_PATHS.rightEye} fill={MAREN_COLORS.eyeWhite} stroke={MAREN_COLORS.outline} strokeWidth="0.65" />
+            <ellipse cx="32" cy="39" rx="1.45" ry="1.65" fill={MAREN_COLORS.iris} />
+            <ellipse cx="44" cy="39" rx="1.45" ry="1.65" fill={MAREN_COLORS.iris} />
+            <circle cx="32" cy="39.2" r="0.72" fill={MAREN_COLORS.pupil} />
+            <circle cx="44" cy="39.2" r="0.72" fill={MAREN_COLORS.pupil} />
+          </g>
+          <path d={MAREN_PATHS.nose} fill="none" stroke={MAREN_COLORS.skinShadow} strokeWidth="1.15" />
+          <g className="co-mouth-closed"><path d={MAREN_PATHS.smile} fill="none" stroke={MAREN_COLORS.rose} strokeWidth="1.45" /></g>
+          <g className="co-mouth-open"><path d={MAREN_PATHS.openMouth} fill={MAREN_COLORS.pupil} stroke={MAREN_COLORS.rose} strokeWidth="0.9" /></g>
+        </g>
+      </svg>
+    </span>
+  );
+}
 
 type DemoDirectorProps = {
   ready: boolean;
@@ -141,11 +177,14 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
         </div>
       ) : !directorHidden && storyVisible && (
         <div className="demo-story" aria-live="polite">
-          {scene.eyebrow && <div className="demo-story-k">{scene.eyebrow}</div>}
-          {scene.title && <div className="demo-story-title">{scene.title}</div>}
-          {scene.line && <div className="demo-story-line">{scene.line}</div>}
-          <div className="demo-progress" aria-hidden="true">
-            <i key={`${scene.id}-${playing ? 'play' : 'pause'}-${speed}`} style={{ animationDuration: `${scene.durationMs / speed}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
+          <MarenNarrator talking={playing} />
+          <div className="demo-story-text">
+            {scene.eyebrow && <div className="demo-story-k">{scene.eyebrow}</div>}
+            {scene.title && <div className="demo-story-title">{scene.title}</div>}
+            {scene.line && <div className="demo-story-line">{scene.line}</div>}
+            <div className="demo-progress" aria-hidden="true">
+              <i key={`${scene.id}-${playing ? 'play' : 'pause'}-${speed}`} style={{ animationDuration: `${scene.durationMs / speed}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
+            </div>
           </div>
         </div>
       )}

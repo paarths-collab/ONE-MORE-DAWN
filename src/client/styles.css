@@ -189,12 +189,18 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
   position: absolute;
   left: 28px;
   bottom: 24px;
-  width: min(360px, calc(100vw - 56px));
+  width: min(460px, calc(100vw - 56px));
+  display: flex;
+  gap: 12px;
+  align-items: center;
   padding: 12px 16px 13px;
   border-left: 4px solid #f2c84a;
-  background: rgba(13, 10, 8, 0.78);
+  background: rgba(13, 10, 8, 0.82);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
 }
+.demo-maren { flex: none; align-self: flex-end; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55)); }
+.demo-maren svg { display: block; }
+.demo-story-text { flex: 1; min-width: 0; }
 .demo-story-k {
   margin-bottom: 5px;
   font-family: var(--pixel);
@@ -296,7 +302,7 @@ html, body, #root { height: 100%; overflow: hidden; background: #0c0a0a; font-fa
   text-align: center;
   text-shadow: 0 3px 0 #511c10, 0 0 30px rgba(255, 143, 52, 0.46);
 }
-.demo-title { font-family: Georgia, serif; font-size: clamp(34px, 4vw, 64px); font-weight: 700; line-height: 0.95; }
+.demo-title { font-family: var(--pixel); font-size: clamp(20px, 2.5vw, 40px); font-weight: 700; line-height: 1.15; letter-spacing: 1px; }
 .demo-tagline, .demo-enter, .demo-coming { font-family: var(--pixel); font-size: clamp(9px, 1vw, 13px); color: #ffe49a; }
 .demo-enter { margin-top: 12px; padding: 9px 16px; border: 1px solid rgba(242, 200, 74, 0.72); background: rgba(24, 13, 8, 0.68); }
 .demo-closing-line { max-width: 470px; margin-top: 4px; font-family: var(--pixel); font-size: clamp(11px, 1.25vw, 17px); line-height: 1.45; color: #fff3cb; }
