@@ -63,7 +63,7 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
   if (!started) {
     return (
       <div className="demo-start" data-showcase-ready={ready ? 'true' : 'false'}>
-        <div className="demo-start-k">A 50 SECOND STORY OF ONE SHARED CITY</div>
+        <div className="demo-start-k">A GUIDED STORY OF ONE SHARED CITY</div>
         <h1>ONE MORE DAWN</h1>
         <p>Build together. Endure the raid. Reconnect what remains.</p>
         <button type="button" onClick={start} disabled={!ready}>
@@ -80,6 +80,9 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
         <div className="demo-story-k">{scene.eyebrow}</div>
         <div className="demo-story-title">{scene.title}</div>
         <div className="demo-story-line">{scene.line}</div>
+        <ul className="demo-story-details">
+          {scene.details.map((detail) => <li key={detail}>{detail}</li>)}
+        </ul>
         <div className="demo-progress" aria-hidden="true">
           <i key={`${scene.id}-${playing ? 'play' : 'pause'}`} style={{ animationDuration: `${scene.durationMs}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
         </div>

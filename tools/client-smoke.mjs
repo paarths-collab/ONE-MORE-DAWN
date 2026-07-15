@@ -970,7 +970,7 @@ async function recordingShowcaseSmoke(url) {
     };
 
     await nextScene('growth');
-    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('contribution'), 'Growth scene explains contributions.');
+    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('Accepted actions'), 'Growth scene explains accepted actions.');
 
     await nextScene('shield');
     await cdp.waitFor(`document.querySelectorAll('.dome-panel .dome-pip').length === 6`, 'shield scene shows six dome segments');

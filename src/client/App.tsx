@@ -33,7 +33,7 @@ import {
 } from './api';
 import { PuzzleGame } from './PuzzleGame';
 import { DemoDirector } from './DemoDirector';
-import { isRecordingShowcase, type ShowcaseSceneId } from './showcase';
+import { isRecordingShowcase, showcasePuzzleTapPlan, type ShowcaseSceneId } from './showcase';
 import { PUZZLE_LEVELS } from '../shared/puzzleLevels';
 import type { PuzzleLevel } from '../shared/puzzle';
 import { isLocalHarnessHost, raidNoteFromEvents, raidOutcomeFromTimeline, worldUnavailableMessage } from './liveUi';
@@ -3396,6 +3396,7 @@ export function App() {
   const raidDaysRef = useRef(5);
   const raidTimersRef = useRef<number[]>([]);
   const showcaseTimersRef = useRef<number[]>([]);
+  const showcaseSceneRef = useRef<ShowcaseSceneId | null>(null);
   const raidLogKeyRef = useRef(0); // monotonic key for raid-log entries
   const hiCooldownRef = useRef(false);
   const hiReplyIdxRef = useRef(0);
@@ -5120,6 +5121,7 @@ export function App() {
   const applyShowcaseScene = useCallback(
     (scene: ShowcaseSceneId) => {
       clearShowcaseTimers();
+      showcaseSceneRef.current = scene;
       const later = (delay: number, task: () => void) => {
         showcaseTimersRef.current.push(window.setTimeout(task, delay));
       };
@@ -5303,27 +5305,26 @@ export function App() {
         setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
         setLiveHouses(showcaseHouses(132));
         setLiveReconstruction(EMPTY_RECONSTRUCTION);
-        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 11));
+        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
         playTrack('dusk');
-        later(450, () => {
+        later(650, () => {
           setPuzzleBusy(true);
           setPuzzleBanner(null);
           getPuzzle()
             .then((data) => {
+              if (showcaseSceneRef.current !== 'puzzle') return;
               setPuzzleData(data);
               setPuzzleLevel(data.level);
               setPuzzleOpen(true);
+              const taps = showcasePuzzleTapPlan(data.level);
+              taps.forEach((tileIndex, step) => {
+                later(1800 + step * 720, () => {
+                  document.querySelectorAll<HTMLButtonElement>('.pz-tile')[tileIndex]?.click();
+                });
+              });
             })
             .catch(() => pushNotif('🔌', "today's puzzle is offline, try again", 'bad'))
             .finally(() => setPuzzleBusy(false));
-        });
-        for (let step = 0; step < 8; step += 1) {
-          later(1700 + step * 380, () => document.querySelector<HTMLButtonElement>('.pz-btn.pz-hint:not(:disabled)')?.click());
-        }
-        later(4800, () => {
-          handleRef.current?.repairDomeSegment(3);
-          setLiveDome(showcaseDome([80, 15, 60, 100, 95, 45], 0));
-          pushNotif('🛡', 'daily puzzle restored shield panel 4', 'good');
         });
         return;
       }
@@ -5336,14 +5337,14 @@ export function App() {
       setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
       setLiveHouses(showcaseHouses(132));
       setLiveReconstruction(EMPTY_RECONSTRUCTION);
-      setLiveDome(showcaseDome([80, 15, 60, 100, 95, 45], 0));
+      setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
       setRaidDays(6);
       const report: DawnReport = {
         day: 6,
         citySummary: [
           'The dome turned three fireballs aside; three reached the city.',
           'Six souls were lost. The community rebuilt u/quiet_marrow’s home.',
-          'The daily circuit restored shield panel 4 before sunrise.',
+          'The daily circuit came back online and awarded +3 standing.',
         ],
         yourImpact: ['You added labor to the rebuild.', 'You reconnected the city puzzle.'],
         title: 'Wall-Warden',
