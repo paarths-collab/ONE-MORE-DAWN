@@ -6,10 +6,52 @@
     <!-- Fonts (Silkscreen + JetBrains Mono) are self-hosted and bundled by Vite
          via game.tsx, so they load same-origin under the Devvit webview CSP. -->
     <title>One More Dawn</title>
+    <!-- Instant boot loader. ENTER THE CITY opens this webview on an empty #root
+         while the ~1MB bundle + fonts download (1-2s), which otherwise shows a
+         blank white flash. This self-contained loader paints immediately and is
+         seamlessly replaced when React mounts (its <Loader/> is visually identical),
+         then by the game. No external CSS/JS so it survives a cold, slow network. -->
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; background: #0c0a0a; }
+      #boot {
+        position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px;
+        background: #0c0a0a; color: #e8e2d6;
+        font-family: 'Silkscreen', 'Courier New', monospace;
+      }
+      #boot .sun {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: radial-gradient(circle at 50% 40%, #ffd9a0, #e8c34a 45%, transparent 100%);
+        box-shadow: 0 0 40px 8px rgba(232, 195, 74, 0.3);
+        animation: boot-pulse 2.2s ease-in-out infinite;
+      }
+      #boot h2 { font-size: 16px; letter-spacing: 2px; color: #e8c34a; }
+      #boot .bar { width: 220px; height: 8px; border: 1px solid #6e5b1e; border-radius: 6px; overflow: hidden; }
+      #boot .bar i {
+        display: block; height: 100%; width: 34%; border-radius: 6px;
+        background: #e8c34a; animation: boot-fill 1.5s ease-in-out infinite;
+      }
+      #boot .st { font-size: 10px; color: #8f8578; }
+      @keyframes boot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      @keyframes boot-fill { 0% { margin-left: -34%; } 100% { margin-left: 100%; } }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .sun { animation: none; }
+        #boot .bar i { animation: none; width: 45%; margin-left: 6%; }
+      }
+    </style>
   </head>
   <body>
-    <!-- Vite entry shell only — the entire UI is React (App.tsx + scene.ts). -->
-    <div id="root"></div>
+    <!-- Vite entry shell — the entire UI is React (App.tsx + scene.ts). The boot
+         loader lives INSIDE #root so React clears it on mount (no flash, no cleanup). -->
+    <div id="root">
+      <div id="boot" role="status" aria-live="polite" aria-label="Loading One More Dawn">
+        <div class="sun"></div>
+        <h2>ONE MORE DAWN</h2>
+        <div class="bar"><i></i></div>
+        <div class="st">waking the village…</div>
+      </div>
+    </div>
     <script type="module" src="game.tsx"></script>
   </body>
 </html>
