@@ -123,6 +123,9 @@ export const showcaseSceneFromSearch = (search: string): ShowcaseSceneId => {
 export const showcaseAutoplayFromSearch = (search: string): boolean =>
   new URLSearchParams(search).get('autoplay') === '1';
 
+export const showcaseCleanCaptureFromSearch = (search: string): boolean =>
+  new URLSearchParams(search).get('clean') === '1';
+
 /**
  * A deterministic tap order for the real puzzle board. It follows the same
  * rotations the server validates, rather than using the Hint button as a fake

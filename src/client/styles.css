@@ -307,7 +307,14 @@ body.demo-title-frame .hud,
 body.demo-title-frame .poi-label,
 body.demo-title-frame .h-owner,
 body.demo-title-frame .dc-label,
-body.demo-title-frame .v-bubble {
+body.demo-title-frame .v-bubble,
+body.demo-clean-capture .hud,
+body.demo-clean-capture .poi-label,
+body.demo-clean-capture .h-owner,
+body.demo-clean-capture .dc-label,
+body.demo-clean-capture .v-bubble,
+body.demo-clean-capture .epic-banner,
+body.demo-clean-capture .floats {
   opacity: 0 !important;
   pointer-events: none !important;
 }

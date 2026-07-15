@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   SHOWCASE_SCENES,
   showcaseAutoplayFromSearch,
+  showcaseCleanCaptureFromSearch,
   showcaseSceneFromSearch,
   type ShowcaseSceneId,
 } from './showcase';
@@ -29,6 +30,7 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
   const [storyVisible, setStoryVisible] = useState(true);
   const scene = SHOWCASE_SCENES[index]!;
   const autoplay = showcaseAutoplayFromSearch(window.location.search);
+  const cleanCapture = showcaseCleanCaptureFromSearch(window.location.search);
   const titleCard = scene.id === 'opening' || scene.id === 'end';
 
   const start = useCallback(() => {
@@ -85,6 +87,11 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     document.body.classList.toggle('demo-title-frame', titleCard);
     return () => document.body.classList.remove('demo-title-frame');
   }, [titleCard]);
+
+  useEffect(() => {
+    document.body.classList.toggle('demo-clean-capture', cleanCapture);
+    return () => document.body.classList.remove('demo-clean-capture');
+  }, [cleanCapture]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
