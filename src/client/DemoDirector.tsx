@@ -150,8 +150,6 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
         </div>
       )}
 
-      {!directorHidden && !soundPrimed && !titleCard && playing && <div className="demo-sound-cue">TAP ANYWHERE FOR SOUND</div>}
-
       {!controlsHidden && (
         <div className="demo-controls" aria-label="Demo recording controls">
           <button type="button" onClick={() => move(-1)} disabled={index === 0} aria-label="Previous scene">‹</button>
