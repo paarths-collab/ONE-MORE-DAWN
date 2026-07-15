@@ -11,8 +11,9 @@ npm run demo:record
 ```
 
 Open `http://127.0.0.1:4670/?showcase=1` at 1280×720 or 1920×1080. The reel
-begins as soon as the city has loaded. Browsers may require the first tap before
-they allow audio; the aggressive raid track starts automatically once permitted.
+begins as soon as the city has loaded. Tap anywhere once when the small sound
+cue appears; this is required by browser audio policy and starts the aggressive
+raid track without interrupting the reel.
 
 ## Story sequence
 

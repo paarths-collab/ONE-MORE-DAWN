@@ -960,6 +960,9 @@ async function recordingShowcaseSmoke(url) {
   try {
     await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts automatically at the camp');
     assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('One subreddit'), 'The recording opens by explaining the shared city.');
+    await cdp.waitFor(`!!document.querySelector('.demo-sound-cue')`, 'showcase explains how to enable browser-gated audio');
+    await cdp.eval(`window.dispatchEvent(new PointerEvent('pointerdown'))`);
+    await cdp.waitFor(`!document.querySelector('.demo-sound-cue')`, 'sound cue clears after the first tap');
     await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))`);
 
     const nextScene = async (scene) => {

@@ -10,6 +10,7 @@ type DemoDirectorProps = {
 export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps) {
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [soundPrimed, setSoundPrimed] = useState(false);
   // Recording starts clean: playback is still controllable by keyboard, but no
   // director strip blocks the Three.js city. Press D to reveal it while editing.
   const [clean, setClean] = useState(true);
@@ -46,6 +47,18 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     return () => window.clearTimeout(timer);
   }, [index, playing, scene.durationMs, started]);
 
+  // Browsers and Reddit webviews block audible autoplay. The reel still starts
+  // visually, then its first normal tap enables the already-selected raid track.
+  useEffect(() => {
+    if (!started || soundPrimed) return undefined;
+    const enableSound = () => {
+      onStartAudio();
+      setSoundPrimed(true);
+    };
+    window.addEventListener('pointerdown', enableSound, { once: true, passive: true });
+    return () => window.removeEventListener('pointerdown', enableSound);
+  }, [onStartAudio, soundPrimed, started]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!started) return;
@@ -79,6 +92,8 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
           <i key={`${scene.id}-${playing ? 'play' : 'pause'}`} style={{ animationDuration: `${scene.durationMs}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
         </div>
       </div>
+
+      {!soundPrimed && <div className="demo-sound-cue">TAP ANYWHERE FOR SOUND</div>}
 
       {!clean && (
         <div className="demo-controls" aria-label="Demo recording controls">
