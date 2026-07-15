@@ -956,36 +956,40 @@ async function puzzleSmoke(url) {
 }
 
 async function recordingShowcaseSmoke(url) {
-  const { cdp, close } = await openPage(`${url}?showcase=1`);
+  const { cdp, close } = await openPage(`${url}?showcase=1&scene=camp`);
   try {
-    await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts automatically at the camp');
-    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('One subreddit'), 'The recording opens by explaining the shared city.');
-    await cdp.waitFor(`!!document.querySelector('.demo-sound-cue')`, 'showcase explains how to enable browser-gated audio');
-    await cdp.eval(`window.dispatchEvent(new PointerEvent('pointerdown'))`);
-    await cdp.waitFor(`!document.querySelector('.demo-sound-cue')`, 'sound cue clears after the first tap');
-    await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))`);
+    await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase opens on the requested Camp capture state');
+    assert(!await cdp.eval(`!!document.querySelector('.demo-story, .demo-controls, .demo-sound-cue')`), 'capture state starts without director, caption, or audio prompt clutter.');
+    await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }))`);
+    await cdp.waitFor(`!!document.querySelector('.demo-controls')`, 'D reveals recording controls without changing the city state');
 
     const nextScene = async (scene) => {
       await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))`);
       await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === ${JSON.stringify(scene)}`, `showcase advances to ${scene}`);
     };
 
-    await nextScene('growth');
-    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('Accepted actions'), 'Growth scene explains accepted actions.');
+    await nextScene('roles');
+    await cdp.waitFor(`!!document.querySelector('.onboard .ob-role')`, 'showcase uses the production role picker');
 
-    await nextScene('shield');
-    await cdp.waitFor(`document.querySelectorAll('.dome-panel .dome-pip').length === 6`, 'shield scene shows six dome segments');
+    await nextScene('contribute');
+    await cdp.waitFor(`!!document.querySelector('.build-panel')`, 'first contribution shows the real shared labor panel');
+
+    await nextScene('growth');
+    await cdp.waitFor(`!!document.querySelector('.demo-director[data-showcase-scene="growth"]')`, 'growth capture state loads deterministically');
+
+    await nextScene('decide');
+    await cdp.waitFor(`!!document.querySelector('.cr-opt') && !!document.querySelector('.mk-pledge') && !!document.querySelector('.co-plan')`, 'community decision scene exposes crisis, pledge, and council controls');
+
+    await nextScene('warning');
+    await cdp.waitFor(`document.querySelectorAll('.dome-panel .dome-pip').length === 6`, 'raid warning shows six dome segments');
 
     await nextScene('raid');
     await cdp.waitFor(`document.querySelector('.raid-banner')?.classList.contains('on')`, 'raid scene activates the raid banner');
     assert((await cdp.eval(`document.querySelector('.raid-banner .rb-t')?.textContent || ''`)).includes('RAID AT THE GATE'), 'Raid scene names the threat.');
 
-    await nextScene('aftermath');
-    await cdp.waitFor(`!!document.querySelector('.rebuild-panel')`, 'aftermath exposes the shared rebuild queue');
-    assert((await cdp.eval(`document.querySelector('.rebuild-panel')?.textContent || ''`)).includes('quiet_marrow'), 'Aftermath preserves the damaged house owner.');
-
     await nextScene('rebuild');
-    await cdp.waitFor(`document.body.innerText.includes('THE CITY REBUILT A HOME')`, 'rebuild animation lands its payoff');
+    await cdp.waitFor(`!!document.querySelector('.rebuild-panel')`, 'rebuild exposes the shared reconstruction queue');
+    assert((await cdp.eval(`document.querySelector('.rebuild-panel')?.textContent || ''`)).includes('quiet_marrow'), 'Rebuild preserves the damaged house owner.');
 
     await nextScene('puzzle');
     await cdp.waitFor(`!!document.querySelector('.pz-root')`, 'daily puzzle opens in sequence');
@@ -995,6 +999,9 @@ async function recordingShowcaseSmoke(url) {
     await cdp.waitFor(`!!document.querySelector('.dawn-report.on')`, 'sequence ends on the Dawn Report');
     const report = await cdp.eval(`document.querySelector('.dawn-report')?.textContent || ''`);
     assert(report.includes('Six souls were lost') && report.includes('reconnected the city puzzle'), `Dawn Report must explain consequence and recovery, saw "${report}".`);
+
+    await nextScene('end');
+    await cdp.waitFor(`(document.querySelector('.demo-title-card')?.textContent || '').includes('A COMMUNITY BUILDS THE CITY')`, 'recording ends with the capture-only launch card');
   } finally {
     await close();
   }

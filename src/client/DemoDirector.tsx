@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SHOWCASE_SCENES, type ShowcaseSceneId } from './showcase';
+import {
+  SHOWCASE_SCENES,
+  showcaseAutoplayFromSearch,
+  showcaseSceneFromSearch,
+  type ShowcaseSceneId,
+} from './showcase';
 
 type DemoDirectorProps = {
   ready: boolean;
@@ -7,26 +12,31 @@ type DemoDirectorProps = {
   onStartAudio: () => void;
 };
 
+const SPEEDS = [0.5, 1, 2] as const;
+
 export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps) {
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [soundPrimed, setSoundPrimed] = useState(false);
-  // Recording starts clean: playback is still controllable by keyboard, but no
-  // director strip blocks the Three.js city. Press D to reveal it while editing.
-  const [clean, setClean] = useState(true);
-  const [index, setIndex] = useState(0);
+  // Capture is clean and paused by default. The editing strip appears only on D.
+  const [controlsHidden, setControlsHidden] = useState(true);
+  const [directorHidden, setDirectorHidden] = useState(true);
+  const [hideCursor, setHideCursor] = useState(false);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+  const [index, setIndex] = useState(() =>
+    SHOWCASE_SCENES.findIndex((entry) => entry.id === showcaseSceneFromSearch(window.location.search)),
+  );
+  const [storyVisible, setStoryVisible] = useState(true);
   const scene = SHOWCASE_SCENES[index]!;
+  const autoplay = showcaseAutoplayFromSearch(window.location.search);
+  const titleCard = scene.id === 'opening' || scene.id === 'end';
 
   const start = useCallback(() => {
     if (!ready) return;
-    onStartAudio();
-    setIndex(0);
     setStarted(true);
-    setPlaying(true);
-  }, [onStartAudio, ready]);
+    setPlaying(autoplay);
+  }, [autoplay, ready]);
 
-  // This is a recording reel, not an extra game mode: begin the moment the
-  // Three.js city is ready instead of putting a second CTA in front of it.
   useEffect(() => {
     if (!ready || started) return;
     start();
@@ -36,28 +46,45 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
     setIndex((current) => Math.min(SHOWCASE_SCENES.length - 1, Math.max(0, current + delta)));
   }, []);
 
+  const replay = useCallback(() => {
+    setIndex(0);
+    setPlaying(true);
+  }, []);
+
   useEffect(() => {
     if (!started) return;
     onScene(scene.id);
-  }, [onScene, scene.id, started]);
+    setStoryVisible(!scene.storyDelayMs);
+    if (!scene.storyDelayMs || !playing) return undefined;
+    const reveal = window.setTimeout(() => setStoryVisible(true), scene.storyDelayMs / speed);
+    return () => window.clearTimeout(reveal);
+  }, [onScene, playing, scene.id, scene.storyDelayMs, speed, started]);
 
   useEffect(() => {
     if (!started || !playing || index >= SHOWCASE_SCENES.length - 1) return undefined;
-    const timer = window.setTimeout(() => setIndex((current) => current + 1), scene.durationMs);
+    const timer = window.setTimeout(() => setIndex((current) => current + 1), scene.durationMs / speed);
     return () => window.clearTimeout(timer);
-  }, [index, playing, scene.durationMs, started]);
+  }, [index, playing, scene.durationMs, speed, started]);
 
-  // Browsers and Reddit webviews block audible autoplay. The reel still starts
-  // visually, then its first normal tap enables the already-selected raid track.
   useEffect(() => {
-    if (!started || soundPrimed) return undefined;
+    if (!started || soundPrimed || !playing) return undefined;
     const enableSound = () => {
       onStartAudio();
       setSoundPrimed(true);
     };
     window.addEventListener('pointerdown', enableSound, { once: true, passive: true });
     return () => window.removeEventListener('pointerdown', enableSound);
-  }, [onStartAudio, soundPrimed, started]);
+  }, [onStartAudio, playing, soundPrimed, started]);
+
+  useEffect(() => {
+    document.body.classList.toggle('demo-hide-cursor', hideCursor);
+    return () => document.body.classList.remove('demo-hide-cursor');
+  }, [hideCursor]);
+
+  useEffect(() => {
+    document.body.classList.toggle('demo-title-frame', titleCard);
+    return () => document.body.classList.remove('demo-title-frame');
+  }, [titleCard]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -67,44 +94,63 @@ export function DemoDirector({ ready, onScene, onStartAudio }: DemoDirectorProps
       else if (event.code === 'Space') {
         event.preventDefault();
         setPlaying((value) => !value);
-      } else if (event.key.toLowerCase() === 'd') setClean((value) => !value);
-      else if (event.key === 'Home') {
-        setIndex(0);
-        setPlaying(true);
-      }
+      } else if (event.key.toLowerCase() === 'd') setControlsHidden((value) => !value);
+      else if (event.key.toLowerCase() === 'h') setDirectorHidden((value) => !value);
+      else if (event.key.toLowerCase() === 'r') replay();
+      else if (event.key.toLowerCase() === 'c') setHideCursor((value) => !value);
+      else if (event.key === 'Home') replay();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [move, started]);
+  }, [move, replay, started]);
 
   if (!started) return null;
 
   return (
-    <div className={clean ? 'demo-director clean' : 'demo-director'} data-showcase-scene={scene.id}>
-      <div className="demo-story" aria-live="polite">
-        <div className="demo-story-k">{scene.eyebrow}</div>
-        <div className="demo-story-title">{scene.title}</div>
-        <div className="demo-story-line">{scene.line}</div>
-        <ul className="demo-story-details">
-          {scene.details.map((detail) => <li key={detail}>{detail}</li>)}
-        </ul>
-        <div className="demo-progress" aria-hidden="true">
-          <i key={`${scene.id}-${playing ? 'play' : 'pause'}`} style={{ animationDuration: `${scene.durationMs}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
+    <div className={directorHidden && !titleCard ? 'demo-director recording-hidden' : 'demo-director'} data-showcase-scene={scene.id}>
+      {titleCard ? (
+        <div className={`demo-title-card ${scene.id === 'end' ? 'closing' : ''}`} aria-live="polite">
+          <div className="demo-title">ONE MORE DAWN</div>
+          {scene.id === 'opening' ? (
+            <div className="demo-enter">ENTER THE CITY</div>
+          ) : (
+            <>
+              <div className="demo-closing-line">A COMMUNITY BUILDS THE CITY IT NEEDS.</div>
+              <div className="demo-coming">CAN YOUR CITY SURVIVE?</div>
+            </>
+          )}
         </div>
-      </div>
+      ) : !directorHidden && storyVisible && (
+        <div className="demo-story" aria-live="polite">
+          {scene.eyebrow && <div className="demo-story-k">{scene.eyebrow}</div>}
+          {scene.title && <div className="demo-story-title">{scene.title}</div>}
+          {scene.line && <div className="demo-story-line">{scene.line}</div>}
+          <div className="demo-progress" aria-hidden="true">
+            <i key={`${scene.id}-${playing ? 'play' : 'pause'}-${speed}`} style={{ animationDuration: `${scene.durationMs / speed}ms`, animationPlayState: playing ? 'running' : 'paused' }} />
+          </div>
+        </div>
+      )}
 
-      {!soundPrimed && <div className="demo-sound-cue">TAP ANYWHERE FOR SOUND</div>}
+      {!directorHidden && !soundPrimed && !titleCard && playing && <div className="demo-sound-cue">TAP ANYWHERE FOR SOUND</div>}
 
-      {!clean && (
+      {!controlsHidden && (
         <div className="demo-controls" aria-label="Demo recording controls">
           <button type="button" onClick={() => move(-1)} disabled={index === 0} aria-label="Previous scene">‹</button>
-          <button type="button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? 'Pause demo' : 'Play demo'}>
-            {playing ? 'Ⅱ' : '▶'}
-          </button>
+          <button type="button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? 'Pause demo' : 'Play demo'}>{playing ? 'Ⅱ' : '▶'}</button>
           <span>{String(index + 1).padStart(2, '0')} / {String(SHOWCASE_SCENES.length).padStart(2, '0')}</span>
-          <button type="button" className="demo-next" onClick={() => move(1)} disabled={index === SHOWCASE_SCENES.length - 1} aria-label="Next scene">›</button>
-          <button type="button" onClick={() => { setIndex(0); setPlaying(true); }} aria-label="Restart demo">↻</button>
-          <button type="button" onClick={() => setClean(true)} aria-label="Hide director controls">●</button>
+          <button type="button" onClick={() => move(1)} disabled={index === SHOWCASE_SCENES.length - 1} aria-label="Next scene">›</button>
+          <button type="button" onClick={replay} aria-label="Replay from the beginning">↻</button>
+          <select value={scene.id} onChange={(event) => {
+            const next = SHOWCASE_SCENES.findIndex((entry) => entry.id === event.currentTarget.value);
+            if (next >= 0) setIndex(next);
+          }} aria-label="Jump to recording scene">
+            {SHOWCASE_SCENES.map((entry) => <option key={entry.id} value={entry.id}>{entry.id}</option>)}
+          </select>
+          <div className="demo-speed" aria-label="Playback speed">
+            {SPEEDS.map((value) => <button key={value} type="button" className={speed === value ? 'on' : ''} onClick={() => setSpeed(value)}>{value}×</button>)}
+          </div>
+          <button type="button" className={hideCursor ? 'on' : ''} onClick={() => setHideCursor((value) => !value)} aria-label="Hide cursor">⌁</button>
+          <button type="button" onClick={() => { setDirectorHidden(true); setControlsHidden(true); }} aria-label="Hide all recording overlays">H</button>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 # Demo Recording Showcase
 
-This branch contains a localhost-only, deterministic 70-second guided story reel. It
+This branch contains a localhost-only, deterministic 88-second guided story reel. It
 uses the real Three.js city, raid cinematic, reconstruction, puzzle, Dawn Report,
 music, and sound systems. It does not change the production Devvit experience.
 
@@ -10,34 +10,63 @@ music, and sound systems. It does not change the production Devvit experience.
 npm run demo:record
 ```
 
-Open `http://127.0.0.1:4670/?showcase=1` at 1280×720 or 1920×1080. The reel
-begins as soon as the city has loaded. Tap anywhere once when the small sound
-cue appears; this is required by browser audio policy and starts the aggressive
-raid track without interrupting the reel.
+Open `http://127.0.0.1:4670/?showcase=1` at 1920×1080. It opens paused on a
+clean Camp frame: no HUD, caption, director, cursor prompt, or browser UI should
+be in a cinematic screenshot. Use `?scene=<key>` to load a specific deterministic
+capture state. Add `&autoplay=1` only when recording a continuous rehearsal.
 
 ## Story sequence
 
 | Time | Scene | What the viewer learns |
 |---:|---|---|
-| 0–6s | The first camp | One subreddit shares one city and one consequence loop. |
-| 6–16s | The city rises | Accepted actions fill a communal build meter and create permanent houses. |
-| 16–24s | Shield reserve | Accepted actions feed the reserve; daily challenges charge one of six panels. |
-| 24–37s | Raid at the gate | Fireballs hit exact dome panels; weak panels can be pierced. |
-| 37–44s | Consequences | Lost souls, a damaged named home, and the rebuild queue remain. |
-| 44–51s | Rebuild together | Community labor restores the neighbor's house without changing ownership. |
-| 51–61s | Daily puzzle | The real conduit board is solved tile-by-tile and awards +3 standing. |
-| 61–70s | One more dawn | The Dawn Report records the shared consequence and personal impact. |
+| 0–4s | Title | One More Dawn and Enter the City. |
+| 4–10s | Camp | A shared city begins with nothing. |
+| 10–17s | Role | The real six-role picker selects Guard. |
+| 17–25s | First contribution | Labor moves; a permanent house appears. |
+| 25–33s | Growth | The city rises through its real unlock sequence. |
+| 33–43s | Community choices | Crisis, Council, The Marked, and Reddit discussion. |
+| 43–48s | Raid warning | The city prepares its six dome panels. |
+| 48–59s | Dome breach | Fireballs hit the dome before the breach result appears. |
+| 59–68s | Rebuild | A damaged named home becomes shared labor, then stands again. |
+| 68–77s | Daily puzzle | The real conduit board is solved tile-by-tile and awards +3 standing. |
+| 77–83s | Dawn Report | The city records what was built, lost, and saved. |
+| 83–88s | End card | A recording-only launch card closes the reel. |
 
-## Director controls
+## Capture controls
 
 - `Space`: play or pause
 - `Left` / `Right`: previous or next scene
 - `Home`: restart
-- `D`: reveal or hide the director controls
+- `R`: replay from the beginning
+- `C`: hide or restore the cursor
+- `D`: reveal or hide the recording controls
+- `H`: hide or restore the director caption layer
 
-The recording starts with no director strip, so the city stays unobstructed.
-Press `D` only when you need the on-screen edit controls; the cinematic
-lower-third remains.
+When the controls are visible, choose `0.5×`, `1×`, or `2×` playback, or jump
+straight to any named state. The controls and caption layer remain hidden by
+default, so only the Three.js scene is captured.
+
+## Scene URLs
+
+- `?showcase=1&scene=camp`
+- `?showcase=1&scene=roles`
+- `?showcase=1&scene=contribute`
+- `?showcase=1&scene=growth`
+- `?showcase=1&scene=decide`
+- `?showcase=1&scene=warning`
+- `?showcase=1&scene=raid`
+- `?showcase=1&scene=rebuild`
+- `?showcase=1&scene=puzzle`
+- `?showcase=1&scene=dawn`
+- `?showcase=1&scene=end`
+
+`opening` and `end` are capture-only title-card states. Do not use them over
+gameplay footage. The main video should cut between clean cinematic city frames
+and short recordings of the real product UI.
+
+The capture starts with no director strip or lower-third, so the city stays
+unobstructed. Press `D` only while setting up a shot, then press `H` to hide
+the controls and captions again before recording.
 
 ## Recording notes
 

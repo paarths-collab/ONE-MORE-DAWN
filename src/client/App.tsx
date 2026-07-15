@@ -837,19 +837,23 @@ const showcaseDome = (segments: number[], shield: number): DomeState => {
   };
 };
 
-const showcaseHouses = (total: number, damaged: HouseSummary['damaged'] = []): HouseSummary => ({
-  total,
-  cap: 240,
-  founder: { username: 'ashen_fox' },
-  yours: { index: 2, tier: 3, isFounder: false },
-  named: [
-    { username: 'ashen_fox', index: 0, tier: 4 },
-    { username: 'saltcedar', index: 1, tier: 3 },
-    { username: 'mock_user', index: 2, tier: 3 },
-    { username: 'quiet_marrow', index: 6, tier: 2 },
-  ],
-  damaged,
-});
+const showcaseHouses = (total: number, damaged: HouseSummary['damaged'] = []): HouseSummary => {
+  if (total === 0) return { total: 0, cap: 240, founder: null, yours: null, named: [], damaged };
+  const named = [
+    { username: 'ashen_fox', index: 0, tier: tierForContribution(40) },
+    { username: 'saltcedar', index: 1, tier: tierForContribution(18) },
+    { username: 'mock_user', index: 2, tier: tierForContribution(18) },
+    { username: 'quiet_marrow', index: 6, tier: tierForContribution(6) },
+  ].filter((house) => house.index < total);
+  return {
+    total,
+    cap: 240,
+    founder: { username: 'ashen_fox' },
+    yours: total > 2 ? { index: 2, tier: 3, isFounder: false } : null,
+    named,
+    damaged,
+  };
+};
 
 const SHOWCASE_RECONSTRUCTION: ReconstructionState = {
   active: true,
@@ -859,6 +863,46 @@ const SHOWCASE_RECONSTRUCTION: ReconstructionState = {
   damaged: 1,
   next: { username: 'quiet_marrow', index: 6, status: 'damaged', done: 4, needed: 5 },
 };
+
+const SHOWCASE_CRISIS: Crisis = {
+  id: 'showcase-convoy',
+  title: 'The Convoy at the Gate',
+  narrative: 'A convoy asks for shelter before the raiders reach the road.',
+  options: [
+    { id: 'a', label: 'Let them in', description: 'More hands, fewer rations.', effects: { population: 12, food: -8, morale: 4 } },
+    { id: 'b', label: 'Inspect first', description: 'Learn their intent.', effects: { threat: 3 } },
+    { id: 'c', label: 'Turn them away', description: 'Protect the stores.', effects: { morale: -8, defense: 3 } },
+  ],
+};
+const SHOWCASE_MARKED: Marked = {
+  id: 'showcase-marked', name: 'Mira, the greenhouse child', kind: 'person',
+  blurb: 'Keep the greenhouse lights burning before dawn.', goal: 40, pledged: 31, unit: 'resolve', savedYesterday: null,
+};
+const SHOWCASE_PLEDGE: PledgeInfo = {
+  usedToday: false,
+  options: [
+    { id: 'stand_vigil', icon: '🕯️', label: 'Stand Vigil', effect: '+1 resolve' },
+    { id: 'share_rations', icon: '🍞', label: 'Share Rations', effect: '+1 resolve' },
+    { id: 'run_messages', icon: '🕊️', label: 'Run Messages', effect: '+1 resolve' },
+    { id: 'back_council', icon: '🏛️', label: 'Back the Council', effect: '+1 resolve' },
+  ],
+  ledger: { topHelpers: ['ashen_fox'], recent: ['saltcedar'], mine: 0 },
+};
+const SHOWCASE_CHATTER: ChatterState = {
+  type: 'chatter', ready: true, weekKey: '2026-07-13', cityDay: 6, category: 'strategy', rootCommentId: 'showcase-thread',
+  threadUrl: 'https://www.reddit.com/r/meadowbrook/comments/showcase/', feedAvailable: true, maxLength: 250, cooldownSeconds: 15,
+  attributionNotice: 'Posting is optional and creates a public Reddit comment from your account.',
+  messages: [
+    { id: 'showcase-comment', author: 'ashen_fox', text: 'Fortify the north dome before the next dawn.', createdAt: '2026-07-15T12:00:00.000Z', permalink: 'https://www.reddit.com/r/meadowbrook/comments/showcase/' },
+  ],
+};
+const SHOWCASE_WORLD: WorldCity[] = [
+  { subreddit: 'r/meadowbrook', cycle: 1, day: 7, survivalDays: 7, status: 'holding', threat: 42, population: 126, savedCount: 3, activePlayers: 38, isYou: true },
+  { subreddit: 'r/ironhollow', cycle: 1, day: 10, survivalDays: 10, status: 'thriving', threat: 24, population: 164, savedCount: 7, activePlayers: 51, isYou: false },
+];
+const SHOWCASE_LEADERBOARD: LeaderboardEntry[] = [
+  { username: 'ashen_fox', score: 142 }, { username: 'mock_user', score: 113 }, { username: 'quiet_marrow', score: 96 },
+];
 
 function VillageCanvas({
   onReady,
@@ -3112,12 +3156,15 @@ function Onboarding({
   defaultName,
   onEnter,
   onDismiss,
+  compact = false,
 }: {
   busy: boolean;
   /** Reddit username — prefilled so "skip it" visibly means "use my Reddit name". */
   defaultName: string;
   onEnter: (role: Role, name: string) => void;
   onDismiss: () => void;
+  /** Recording-only: show the production role cards without the long primer. */
+  compact?: boolean;
 }) {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [name, setName] = useState(defaultName.slice(0, 24));
@@ -3128,12 +3175,12 @@ function Onboarding({
         <button type="button" className="p-x" onClick={onDismiss} aria-label="Dismiss onboarding" autoFocus>
           ✕
         </button>
-        <div className="ob-sub" style={{ color: 'var(--ink)', marginTop: 0, marginBottom: 10 }}>
+        {!compact && <div className="ob-sub" style={{ color: 'var(--ink)', marginTop: 0, marginBottom: 10 }}>
           This subreddit is a shared city trying to survive one more dawn. It begins as a bare Camp,
           everyone builds it up together, and your first contribution raises your own house in it. Take
           your daily action, vote on the crisis, pledge to save The Marked, and hold the wall, then come
           back at dawn to see what the community's choices did. The city remembers.
-        </div>
+        </div>}
         <div className="ob-title" id="onboard-title">CHOOSE YOUR ROLE</div>
         <div className="ob-sub">Your role shapes what you're best at. You can change it later.</div>
         <div className="ob-roles">
@@ -3151,13 +3198,13 @@ function Onboarding({
             </button>
           ))}
         </div>
-        <input
+        {!compact && <input
           className="ob-name"
           placeholder="name your survivor, or we'll use your Reddit name"
           maxLength={24}
           value={name}
           onChange={(e) => setName(e.target.value)}
-        />
+        />}
         <button
           type="button"
           className="ob-go"
@@ -4274,6 +4321,13 @@ export function App() {
     setOnboardOpen(false);
     setNeedsOnboard(false);
   }, []);
+  const onShowcaseRole = useCallback((role: Role) => {
+    const roleLabel = ROLE_CATALOG.find((entry) => entry.id === role)?.label ?? role;
+    setOnboardOpen(false);
+    setNeedsOnboard(false);
+    showEpic(`${roleLabel} CHOSEN`, 'Your city needs you before dawn.');
+    playSound('action_confirm');
+  }, [showEpic]);
 
   // A dome mend just landed (the shared shield pool crossed the repair threshold):
   // grow the panel(s) back in the scene, chime, and tell the city. Occasional, so
@@ -5167,18 +5221,73 @@ export function App() {
       handleRef.current?.setRaidWatch(false);
       handleRef.current?.setRaiders(false);
 
+      if (scene === 'opening') {
+        setShotDashboard(false);
+        setShotTime('dawn');
+        setPopulation(0);
+        setVitals({ FOOD: 18, POWER: 6, MEDICINE: 2, MORALE: 32, THREAT: 12, DEFENSE: 4 });
+        setLiveBuild(demoBuildStatus([], 0, 0));
+        setLiveHouses(showcaseHouses(0));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
+        setRaidDays(6);
+        handleRef.current?.focusOverview();
+        playTrack('dawn');
+        return;
+      }
+
       if (scene === 'camp') {
         setShotDashboard(false);
         setShotTime('dawn');
-        setPopulation(12);
+        setPopulation(0);
         setVitals({ FOOD: 34, POWER: 18, MEDICINE: 8, MORALE: 44, THREAT: 18, DEFENSE: 10 });
         setLiveBuild(demoBuildStatus([], 0, 0));
-        setLiveHouses(showcaseHouses(3));
+        setLiveHouses(showcaseHouses(0));
         setLiveReconstruction(EMPTY_RECONSTRUCTION);
         setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
         setRaidDays(6);
         handleRef.current?.focusOverview();
         playTrack('raid');
+        return;
+      }
+
+      if (scene === 'roles') {
+        setShotDashboard(false);
+        setShotTime('dawn');
+        setPopulation(0);
+        setLiveBuild(demoBuildStatus([], 0, 0));
+        setLiveHouses(showcaseHouses(0));
+        setNeedsOnboard(true);
+        setOnboardOpen(true);
+        later(1700, () => {
+          [...document.querySelectorAll<HTMLButtonElement>('.ob-role')]
+            .find((button) => button.textContent?.includes('GUARD'))?.click();
+        });
+        later(3400, () => document.querySelector<HTMLButtonElement>('.ob-go')?.click());
+        return;
+      }
+
+      if (scene === 'contribute') {
+        setShotDashboard(true, 'city');
+        setShotTime('day');
+        setPopulation(0);
+        setLiveBuild(demoBuildStatus([], 0, 0));
+        setLiveHouses(showcaseHouses(0));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
+        handleRef.current?.focusOverview();
+        later(1200, () => {
+          setLiveBuild(demoBuildStatus([], BUILD_LABOR_STEP, 1));
+          setPopulation(3);
+          setLiveHouses(showcaseHouses(3));
+          showEpic('YOUR HOUSE NOW STANDS IN THE CITY', 'First contribution accepted · house #3');
+          playSound('action_confirm');
+        });
+        later(4400, () => {
+          setLiveBuild(demoBuildStatus(['shelter'], 11, 6));
+          handleRef.current?.flashDistrict?.('SHELTER');
+          playSound('rebuild_done');
+        });
         return;
       }
 
@@ -5206,7 +5315,32 @@ export function App() {
         return;
       }
 
-      if (scene === 'shield') {
+      if (scene === 'decide') {
+        setShotDashboard(true, 'live');
+        setShotTime('dusk');
+        setPopulation(132);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 38));
+        setLiveHouses(showcaseHouses(132));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveCrisis(SHOWCASE_CRISIS);
+        setLiveCrisisVotes({ a: 17, b: 12, c: 8 });
+        setLiveMyVote(null);
+        setLiveStrategyVotes({ prepare_raid: 24, stockpile_food: 13, repair_power: 7, treat_sick: 5 });
+        setLiveMyPlan(null);
+        setLiveMarked(SHOWCASE_MARKED);
+        setLivePledge(SHOWCASE_PLEDGE);
+        setLiveChatter(SHOWCASE_CHATTER);
+        setChatterCategory('strategy');
+        setRaidDays(1);
+        later(1000, () => document.querySelector<HTMLButtonElement>('.cr-opt')?.click());
+        later(2600, () => document.querySelector<HTMLButtonElement>('.co-plan')?.click());
+        later(4100, () => document.querySelector<HTMLButtonElement>('.mk-pledge')?.click());
+        later(6100, () => document.querySelector<HTMLElement>('.dash')?.scrollTo({ top: 1000, behavior: 'smooth' }));
+        playTrack('raid');
+        return;
+      }
+
+      if (scene === 'warning') {
         setShotDashboard(true, 'city');
         setShotTime('dusk');
         setPopulation(132);
@@ -5220,7 +5354,7 @@ export function App() {
         later(2300, () => {
           handleRef.current?.repairDomeSegment(3);
           setLiveDome(showcaseDome(SHOWCASE_DOME_READY, 0));
-          pushNotif('🛡', '+12 shield points repaired panel 4', 'good');
+          pushNotif('🛡', '+12 shield points repaired dome panel 4', 'good');
           playSound('dome_repair');
         });
         return;
@@ -5260,22 +5394,6 @@ export function App() {
         return;
       }
 
-      if (scene === 'aftermath') {
-        setShotDashboard(true, 'city');
-        setShotTime('dusk');
-        setPopulation(126);
-        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 38));
-        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
-        setLiveHouses(aftermathHouses);
-        setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
-        raidPhaseRef.current = 'breach';
-        setRaidPhase('breach');
-        handleRef.current?.focusOverview();
-        showEpic('THE COST OF DAWN', 'u/quiet_marrow’s home was struck');
-        playTrack('raid');
-        return;
-      }
-
       if (scene === 'rebuild') {
         setShotDashboard(true, 'city');
         setShotTime('day');
@@ -5287,6 +5405,11 @@ export function App() {
         handleRef.current?.focusOverview();
         playTrack('raid');
         later(900, () => {
+          setLiveReconstruction({
+            ...SHOWCASE_RECONSTRUCTION,
+            contributed: 5,
+            next: { ...SHOWCASE_RECONSTRUCTION.next!, done: 5 },
+          });
           handleRef.current?.rebuildHouse(6);
           playSound('rebuild_done');
           showEpic('THE CITY REBUILT A HOME', 'u/quiet_marrow’s house stands again');
@@ -5329,47 +5452,63 @@ export function App() {
         return;
       }
 
+      if (scene === 'dawn') {
+        setShotDashboard(false);
+        setShotTime('dawn');
+        dayRef.current = 7;
+        setDay(7);
+        setPopulation(126);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
+        setLiveHouses(showcaseHouses(132));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
+        setLiveLb(SHOWCASE_LEADERBOARD);
+        setLiveLbUnavailable(false);
+        setWorldCities(SHOWCASE_WORLD);
+        setWorldNote('Local recording snapshot');
+        setRaidDays(6);
+        const report: DawnReport = {
+          day: 6,
+          citySummary: [
+            'The dome turned three fireballs aside; three reached the city.',
+            'Six souls were lost. The community rebuilt u/quiet_marrow’s home.',
+            'The daily circuit came back online and awarded +3 standing.',
+          ],
+          yourImpact: ['You added labor to the rebuild.', 'You reconnected the city puzzle.'],
+          title: 'Dome Warden',
+          raidAftermath: {
+            held: false,
+            wallBreached: true,
+            housesDestroyed: [],
+            housesDamaged: 1,
+            reconstructionRequired: 5,
+            fireballs: SHOWCASE_VOLLEY,
+            penetrations: 3,
+            soulsLost: 6,
+            segmentsBefore: SHOWCASE_DOME_READY,
+            segmentsAfter: SHOWCASE_DOME_WORN,
+          },
+        };
+        setDawnReport(report);
+        setDawnOpen(true);
+        handleRef.current?.focusOverview();
+        playTrack('dawn');
+        playSound('dawn_report');
+        later(3300, () => {
+          setDawnOpen(false);
+          setShotDashboard(true, 'top', 'world');
+        });
+        return;
+      }
+
       setShotDashboard(false);
       setShotTime('dawn');
-      dayRef.current = 7;
-      setDay(7);
       setPopulation(126);
-      setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
       setLiveHouses(showcaseHouses(132));
       setLiveReconstruction(EMPTY_RECONSTRUCTION);
       setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
-      setRaidDays(6);
-      const report: DawnReport = {
-        day: 6,
-        citySummary: [
-          'The dome turned three fireballs aside; three reached the city.',
-          'Six souls were lost. The community rebuilt u/quiet_marrow’s home.',
-          'The daily circuit came back online and awarded +3 standing.',
-        ],
-        yourImpact: ['You added labor to the rebuild.', 'You reconnected the city puzzle.'],
-        title: 'Wall-Warden',
-        raidAftermath: {
-          held: false,
-          wallBreached: true,
-          housesDestroyed: [],
-          housesDamaged: 1,
-          reconstructionRequired: 5,
-          fireballs: SHOWCASE_VOLLEY,
-          penetrations: 3,
-          soulsLost: 6,
-          segmentsBefore: SHOWCASE_DOME_READY,
-          segmentsAfter: SHOWCASE_DOME_WORN,
-        },
-      };
-      setDawnReport(report);
-      setDawnOpen(true);
       handleRef.current?.focusOverview();
-      playTrack('raid');
-      playSound('dawn_report');
-      later(4000, () => {
-        setDawnOpen(false);
-        setShotDashboard(true, 'map', 'world');
-      });
+      playTrack('dawn');
     },
     [clearShowcaseTimers, pushNotif, showEpic],
   );
@@ -5439,20 +5578,39 @@ export function App() {
           markedGoal: liveMarked.goal,
           markedUnit: liveMarked.unit,
           pledgeOptions: livePledge.options.map((o) => ({ id: o.id, icon: o.icon, label: o.label })),
-          onPledgeKind: onLivePledge,
+          onPledgeKind: showcaseEnabled
+            ? (kind) => {
+                void kind;
+                setLivePledge((current) => current ? { ...current, usedToday: true, ledger: { ...current.ledger, mine: 1 } } : current);
+                setLiveMarked((current) => current ? { ...current, pledged: current.pledged + 1 } : current);
+                playSound('pledge');
+              }
+            : onLivePledge,
           crisisTitle: liveCrisis.title,
           crisisNarrative: liveCrisis.narrative,
           crisisOptions: liveCrisis.options.map((o) => ({ id: o.id, label: o.label, fx: fmtDelta(o.effects) })),
           crisisVotes: liveCrisisVotes,
           myVote: liveMyVote,
-          onVote: onLiveVote,
+          onVote: showcaseEnabled
+            ? (id) => {
+                setLiveMyVote(id);
+                setLiveCrisisVotes((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+                playSound('vote_cast');
+              }
+            : onLiveVote,
           plans: (Object.keys(liveStrategyVotes).length ? Object.keys(liveStrategyVotes) : STRATEGY_IDS).map((id) => ({
             id,
             nm: PLAN_LABELS[id] ?? id,
             votes: liveStrategyVotes[id] ?? 0,
           })),
           myPlan: liveMyPlan,
-          onPlan: onLiveStrategy,
+          onPlan: showcaseEnabled
+            ? (id) => {
+                setLiveMyPlan(id);
+                setLiveStrategyVotes((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+                playSound('vote_cast');
+              }
+            : onLiveStrategy,
           raidLikely: liveRaidLikely,
           raidNote: liveRaidNote,
           hasDawnReport: dawnReport !== null,
@@ -5882,7 +6040,15 @@ export function App() {
           }}
         />
       )}
-      {showOnboard && <Onboarding busy={onboardBusy} defaultName={liveUsername} onEnter={onEnterCity} onDismiss={dismissOnboard} />}
+      {showOnboard && (
+        <Onboarding
+          busy={onboardBusy}
+          defaultName={liveUsername}
+          onEnter={showcaseEnabled ? onShowcaseRole : onEnterCity}
+          onDismiss={dismissOnboard}
+          compact={showcaseEnabled}
+        />
+      )}
       {puzzleOpen && puzzleData && (
         <div className="puzzle-overlay" role="dialog" aria-modal="true" aria-label="Daily puzzle">
           <div className="puzzle-shell">
