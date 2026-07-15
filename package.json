@@ -7,6 +7,7 @@
   "scripts": {
     "build": "vite build",
     "deploy": "npm run type-check && npm run lint && npm test && npm run test:client && npm run build && npm run size-check && devvit upload",
+    "demo:record": "node tools/demo-recording.mjs",
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",

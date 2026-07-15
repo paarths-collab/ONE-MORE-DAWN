@@ -66,6 +66,8 @@ export type VillageHandle = {
   setCompanion: (kind: CompanionKind, on: boolean) => void;
   /** Fly the camera to a labeled district and select it. */
   focusOn: (name: string) => void;
+  /** Pull back to a smooth city-wide recording shot that reveals the energy dome. */
+  focusOverview: () => void;
   /** Toggle raid-watch ambience: red glow beyond the south gate + tinted sky. */
   setRaidWatch: (on: boolean) => void;
   /** Toggle the visible raiding party: 5 dark-tinted soldiers pacing at the main gate. */
@@ -1844,6 +1846,12 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
     dir.normalize();
     const pos = tgt.clone().addScaledVector(dir, 24);
     pos.y = 17;
+    fly = { tgt, pos };
+  }
+
+  function focusOverview() {
+    const tgt = new THREE.Vector3(0, 4, 2);
+    const pos = new THREE.Vector3(5, 96, 126);
     fly = { tgt, pos };
   }
 
@@ -3775,6 +3783,7 @@ export function createVillageScene(container: HTMLElement, hooks: VillageHooks):
       void setCompanionImpl(kind, on);
     },
     focusOn,
+    focusOverview,
     setRaidWatch: (on) => {
       raidOn = on;
     },

@@ -955,6 +955,50 @@ async function puzzleSmoke(url) {
   }
 }
 
+async function recordingShowcaseSmoke(url) {
+  const { cdp, close } = await openPage(`${url}?showcase=1`);
+  try {
+    await cdp.waitFor(`document.querySelector('.demo-start')?.getAttribute('data-showcase-ready') === 'true'`, 'recording showcase is ready');
+    assert((await cdp.eval(`document.querySelector('.demo-start h1')?.textContent || ''`)).includes('ONE MORE DAWN'), 'The recording opens on the game title.');
+    await cdp.eval(`document.querySelector('.demo-start button')?.click()`);
+    await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === 'camp'`, 'showcase starts at the camp');
+    await cdp.eval(`document.querySelector('[aria-label="Pause demo"]')?.click()`);
+
+    const nextScene = async (scene) => {
+      await cdp.eval(`document.querySelector('.demo-next')?.click()`);
+      await cdp.waitFor(`document.querySelector('.demo-director')?.getAttribute('data-showcase-scene') === ${JSON.stringify(scene)}`, `showcase advances to ${scene}`);
+    };
+
+    await nextScene('growth');
+    assert((await cdp.eval(`document.querySelector('.demo-story-title')?.textContent || ''`)).includes('contribution'), 'Growth scene explains contributions.');
+
+    await nextScene('shield');
+    await cdp.waitFor(`document.querySelectorAll('.dome-panel .dome-pip').length === 6`, 'shield scene shows six dome segments');
+
+    await nextScene('raid');
+    await cdp.waitFor(`document.querySelector('.raid-banner')?.classList.contains('on')`, 'raid scene activates the raid banner');
+    assert((await cdp.eval(`document.querySelector('.raid-banner .rb-t')?.textContent || ''`)).includes('RAID AT THE GATE'), 'Raid scene names the threat.');
+
+    await nextScene('aftermath');
+    await cdp.waitFor(`!!document.querySelector('.rebuild-panel')`, 'aftermath exposes the shared rebuild queue');
+    assert((await cdp.eval(`document.querySelector('.rebuild-panel')?.textContent || ''`)).includes('quiet_marrow'), 'Aftermath preserves the damaged house owner.');
+
+    await nextScene('rebuild');
+    await cdp.waitFor(`document.body.innerText.includes('THE CITY REBUILT A HOME')`, 'rebuild animation lands its payoff');
+
+    await nextScene('puzzle');
+    await cdp.waitFor(`!!document.querySelector('.pz-root')`, 'daily puzzle opens in sequence');
+    await cdp.waitFor(`!!document.querySelector('.pz-banner')`, 'recording puzzle solves deterministically');
+
+    await nextScene('dawn');
+    await cdp.waitFor(`!!document.querySelector('.dawn-report.on')`, 'sequence ends on the Dawn Report');
+    const report = await cdp.eval(`document.querySelector('.dawn-report')?.textContent || ''`);
+    assert(report.includes('Six souls were lost') && report.includes('reconnected the city puzzle'), `Dawn Report must explain consequence and recovery, saw "${report}".`);
+  } finally {
+    await close();
+  }
+}
+
 async function campSmoke(url) {
   const { cdp, close } = await openPage(url);
   try {
@@ -1134,18 +1178,21 @@ async function firstHouseSmoke(url) {
   }
 }
 
-await withServer('mock-live core loop', 4640, {}, liveSmoke);
-await withServer('mock-live onboarding', 4641, { MOCK_ROLE_NULL: '1' }, onboardingSmoke);
-await withServer('mock-live fallen city', 4642, { MOCK_FALLEN: '1' }, fallenSmoke);
-await withServer('mock-live brand-new camp', 4643, { MOCK_CAMP: '1' }, campSmoke);
-await withServer('mock-live portrait fallback', 4644, {}, portraitSmoke);
-await withServer('mock-live first house feedback', 4645, { MOCK_NO_HOUSE: '1' }, firstHouseSmoke);
-await withServer('mock-live landscape layout', 4646, {}, landscapeLayoutSmoke);
-await withServer('feed splash', 4647, {}, splashSmoke);
-await withServer('mock-live refresh failure', 4648, { MOCK_INIT_FAIL_AFTER_MUTATION: '1' }, refreshFailureSmoke);
-await withServer('mock-live leaderboard failure', 4649, { MOCK_LEADERBOARD_FAIL: '1' }, leaderboardFailureSmoke);
-await withServer('mock-live optional name failure', 4650, { MOCK_ROLE_NULL: '1', MOCK_AVATAR_FAIL: '1' }, optionalNameFailureSmoke);
-await withServer('mock-live raid reconstruction', 4651, { MOCK_RAID_AFTERMATH: '1' }, reconstructionSmoke);
-await withServer('mock-live daily puzzle', 4652, {}, puzzleSmoke);
+if (process.env.SMOKE_SHOWCASE_ONLY !== '1') {
+  await withServer('mock-live core loop', 4640, {}, liveSmoke);
+  await withServer('mock-live onboarding', 4641, { MOCK_ROLE_NULL: '1' }, onboardingSmoke);
+  await withServer('mock-live fallen city', 4642, { MOCK_FALLEN: '1' }, fallenSmoke);
+  await withServer('mock-live brand-new camp', 4643, { MOCK_CAMP: '1' }, campSmoke);
+  await withServer('mock-live portrait fallback', 4644, {}, portraitSmoke);
+  await withServer('mock-live first house feedback', 4645, { MOCK_NO_HOUSE: '1' }, firstHouseSmoke);
+  await withServer('mock-live landscape layout', 4646, {}, landscapeLayoutSmoke);
+  await withServer('feed splash', 4647, {}, splashSmoke);
+  await withServer('mock-live refresh failure', 4648, { MOCK_INIT_FAIL_AFTER_MUTATION: '1' }, refreshFailureSmoke);
+  await withServer('mock-live leaderboard failure', 4649, { MOCK_LEADERBOARD_FAIL: '1' }, leaderboardFailureSmoke);
+  await withServer('mock-live optional name failure', 4650, { MOCK_ROLE_NULL: '1', MOCK_AVATAR_FAIL: '1' }, optionalNameFailureSmoke);
+  await withServer('mock-live raid reconstruction', 4651, { MOCK_RAID_AFTERMATH: '1' }, reconstructionSmoke);
+  await withServer('mock-live daily puzzle', 4652, {}, puzzleSmoke);
+}
+await withServer('recording showcase sequence', 4653, {}, recordingShowcaseSmoke);
 
 console.log('client smoke passed');

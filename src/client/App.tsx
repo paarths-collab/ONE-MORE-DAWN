@@ -32,6 +32,8 @@ import {
   solvePuzzle,
 } from './api';
 import { PuzzleGame } from './PuzzleGame';
+import { DemoDirector } from './DemoDirector';
+import { isRecordingShowcase, type ShowcaseSceneId } from './showcase';
 import { PUZZLE_LEVELS } from '../shared/puzzleLevels';
 import type { PuzzleLevel } from '../shared/puzzle';
 import { isLocalHarnessHost, raidNoteFromEvents, raidOutcomeFromTimeline, worldUnavailableMessage } from './liveUi';
@@ -56,7 +58,7 @@ import {
   type ChatterState,
 } from '../shared/chatter';
 import { navigateTo } from '@devvit/web/client';
-import { isMuted, playSound, preloadSounds, toggleMuted, unlockAudio } from './sound';
+import { isMuted, playSound, preloadSounds, setMuted, toggleMuted, unlockAudio } from './sound';
 import { isMusicMuted, playTrack, refreshMusicVolume, stopMusic, toggleMusicMuted, unlockMusic } from './music';
 import { getMasterVolume, setMasterVolume } from './audioSettings';
 import type {
@@ -803,6 +805,59 @@ const demoBuildStatus = (unlocked: string[], progress: number, contributorsToday
     contributorsToday,
     youBuiltToday: false,
   };
+};
+
+const SHOWCASE_UNLOCKED = BUILD_SEQUENCE.map((building) => building.id);
+const SHOWCASE_DOME_READY = [92, 84, 88, 76, 95, 82];
+const SHOWCASE_DOME_WORN = [80, 15, 60, 0, 95, 45];
+const SHOWCASE_VOLLEY: RaidFireball[] = [
+  { power: 45, segment: 0, blocked: true },
+  { power: 88, segment: 1, blocked: false },
+  { power: 40, segment: 2, blocked: true },
+  { power: 90, segment: 3, blocked: false },
+  { power: 30, segment: 4, blocked: true },
+  { power: 55, segment: 5, blocked: false },
+];
+
+const showcaseDome = (segments: number[], shield: number): DomeState => {
+  let nextRepairSegment: number | null = null;
+  let weakest = 101;
+  segments.forEach((segment, index) => {
+    if (segment < weakest && segment < 100) {
+      weakest = segment;
+      nextRepairSegment = index;
+    }
+  });
+  return {
+    segments: [...segments],
+    energyPct: Math.round(segments.reduce((sum, segment) => sum + segment, 0) / segments.length),
+    shield,
+    repairThreshold: 12,
+    nextRepairSegment,
+  };
+};
+
+const showcaseHouses = (total: number, damaged: HouseSummary['damaged'] = []): HouseSummary => ({
+  total,
+  cap: 240,
+  founder: { username: 'ashen_fox' },
+  yours: { index: 2, tier: 3, isFounder: false },
+  named: [
+    { username: 'ashen_fox', index: 0, tier: 4 },
+    { username: 'saltcedar', index: 1, tier: 3 },
+    { username: 'mock_user', index: 2, tier: 3 },
+    { username: 'quiet_marrow', index: 6, tier: 2 },
+  ],
+  damaged,
+});
+
+const SHOWCASE_RECONSTRUCTION: ReconstructionState = {
+  active: true,
+  required: 5,
+  contributed: 4,
+  destroyed: 0,
+  damaged: 1,
+  next: { username: 'quiet_marrow', index: 6, status: 'damaged', done: 4, needed: 5 },
 };
 
 function VillageCanvas({
@@ -3166,6 +3221,7 @@ function FallenScreen({
 }
 
 export function App() {
+  const showcaseEnabled = isRecordingShowcase(window.location.hostname, window.location.search);
   const [pct, setPct] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<BuildingMeta | null>(null);
@@ -3339,6 +3395,7 @@ export function App() {
   const raidPhaseRef = useRef<RaidPhase>('idle');
   const raidDaysRef = useRef(5);
   const raidTimersRef = useRef<number[]>([]);
+  const showcaseTimersRef = useRef<number[]>([]);
   const raidLogKeyRef = useRef(0); // monotonic key for raid-log entries
   const hiCooldownRef = useRef(false);
   const hiReplyIdxRef = useRef(0);
@@ -3860,7 +3917,7 @@ export function App() {
   // Poll the real game every 30s so other players' votes/pledges/actions (and
   // the next dawn) show up. Skipped while one of our own POSTs is in flight.
   useEffect(() => {
-    if (mode !== 'live') return undefined;
+    if (mode !== 'live' || showcaseEnabled) return undefined;
     const id = window.setInterval(() => {
       if (mutatingRef.current) return;
       getInit()
@@ -4556,6 +4613,7 @@ export function App() {
   // DEMO: the old fast ambient cycle (~12s per phase), where a dawn transition
   // also advances the demo day counter.
   useEffect(() => {
+    if (showcaseEnabled) return undefined;
     const liveTimeOfDay = (): TimeOfDay => {
       const h = new Date().getHours();
       if (h >= 5 && h < 9) return 'dawn';
@@ -4585,7 +4643,7 @@ export function App() {
       }
     }, 12000);
     return () => window.clearInterval(id);
-  }, [pushEvent, pushNotif]);
+  }, [pushEvent, pushNotif, showcaseEnabled]);
 
   // New dawn → the daily actions refresh (skip the initial render). Demo only:
   // in live mode `yourActionsToday`/energy come back fresh from the server.
@@ -5038,6 +5096,283 @@ export function App() {
     else if (raidDays >= 5) h?.setRaidWatch?.(false);
   }, [raidDays, loaded]);
 
+  const clearShowcaseTimers = useCallback(() => {
+    showcaseTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    showcaseTimersRef.current = [];
+  }, []);
+
+  useEffect(() => () => clearShowcaseTimers(), [clearShowcaseTimers]);
+
+  const startShowcaseAudio = useCallback(() => {
+    unlockAudio();
+    unlockMusic();
+    setMuted(false);
+    setMutedUi(false);
+    if (isMusicMuted()) toggleMusicMuted();
+    setMusicMutedUi(false);
+    const volume = setMasterVolume(0.8);
+    setMasterVolumeUi(volume);
+    refreshMusicVolume();
+    playTrack('dusk');
+    playSound('button_click');
+  }, []);
+
+  const applyShowcaseScene = useCallback(
+    (scene: ShowcaseSceneId) => {
+      clearShowcaseTimers();
+      const later = (delay: number, task: () => void) => {
+        showcaseTimersRef.current.push(window.setTimeout(task, delay));
+      };
+      const setShotTime = (next: TimeOfDay) => {
+        timeRef.current = next;
+        setTimeState(next);
+        handleRef.current?.setTimeOfDay(next);
+      };
+      const setShotDashboard = (open: boolean, tab: DashTab = 'map', viewMode: MapViewMode = 'town') => {
+        setDashOpen(open);
+        setDashTab(tab);
+        dashTabRef.current = tab;
+        setMapView(viewMode);
+        mapViewRef.current = viewMode;
+      };
+      const damage: HouseSummary['damaged'] = [{ index: 6, username: 'quiet_marrow', status: 'damaged' }];
+      const aftermathHouses = showcaseHouses(132, damage);
+
+      setCoachStep(null);
+      setCoachFlow(null);
+      setCoachRing(null);
+      setNeedsOnboard(false);
+      setOnboardOpen(false);
+      setDawnOpen(false);
+      setDawnTeaserOpen(false);
+      setPuzzleOpen(false);
+      setStatsOpen(false);
+      setBoardOpen(false);
+      setSettingsOpen(false);
+      setSelected(null);
+      setNotifs([]);
+      setEpic(null);
+      epicQueueRef.current = [];
+      setHudDismissed({ raid: true, mission: true, rekindle: true });
+      setCityFallen(false);
+      setLiveCityName('VAELMAR');
+      setLiveUsername('mock_user');
+      dayRef.current = 6;
+      setDay(6);
+      setLiveRaidLikely(false);
+      raidPhaseRef.current = 'idle';
+      setRaidPhase('idle');
+      handleRef.current?.setRaidWatch(false);
+      handleRef.current?.setRaiders(false);
+
+      if (scene === 'camp') {
+        setShotDashboard(false);
+        setShotTime('dawn');
+        setPopulation(12);
+        setVitals({ FOOD: 34, POWER: 18, MEDICINE: 8, MORALE: 44, THREAT: 18, DEFENSE: 10 });
+        setLiveBuild(demoBuildStatus([], 0, 0));
+        setLiveHouses(showcaseHouses(3));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
+        setRaidDays(6);
+        handleRef.current?.focusOverview();
+        playTrack('dawn');
+        return;
+      }
+
+      if (scene === 'growth') {
+        setShotDashboard(false);
+        setShotTime('day');
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome([0, 0, 0, 0, 0, 0], 0));
+        handleRef.current?.focusOverview();
+        playTrack('dusk');
+        const steps = [0, 1, 2, 3, 4, 5, 7];
+        steps.forEach((count, index) => {
+          later(index * 850, () => {
+            const unlocked = SHOWCASE_UNLOCKED.slice(0, count);
+            setLiveBuild(demoBuildStatus(unlocked, count === 7 ? 0 : 8 + index * 3, 4 + index * 5));
+            setLiveHouses(showcaseHouses(6 + index * 21));
+            setPopulation(18 + index * 19);
+            if (count > 0) handleRef.current?.flashDistrict?.(poisRef.current[Math.min(index - 1, poisRef.current.length - 1)]?.name ?? 'ASSEMBLY');
+          });
+        });
+        later(5400, () => {
+          showEpic('THE CITY STANDS', '132 Redditors built one shared home');
+          playSound('rebuild_done');
+        });
+        return;
+      }
+
+      if (scene === 'shield') {
+        setShotDashboard(true, 'city');
+        setShotTime('dusk');
+        setPopulation(132);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 38));
+        setLiveHouses(showcaseHouses(132));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome([92, 84, 88, 56, 95, 82], 11));
+        setRaidDays(1);
+        handleRef.current?.focusOverview();
+        playTrack('raid');
+        later(2300, () => {
+          handleRef.current?.repairDomeSegment(3);
+          setLiveDome(showcaseDome(SHOWCASE_DOME_READY, 0));
+          pushNotif('🛡', '+12 shield points repaired panel 4', 'good');
+          playSound('dome_repair');
+        });
+        return;
+      }
+
+      if (scene === 'raid') {
+        setShotDashboard(false);
+        setShotTime('night');
+        setPopulation(132);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 38));
+        setLiveHouses(showcaseHouses(132));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome(SHOWCASE_DOME_READY, 0));
+        setLiveRaidLikely(true);
+        raidDaysRef.current = 0;
+        setRaidDays(0);
+        raidPhaseRef.current = 'incoming';
+        setRaidPhase('incoming');
+        handleRef.current?.focusOverview();
+        handleRef.current?.setRaidWatch(true);
+        handleRef.current?.setRaiders(true);
+        playTrack('raid');
+        later(700, () => {
+          handleRef.current?.playRaidCinematic({ outcome: 'breach', fireballs: SHOWCASE_VOLLEY, hitHouseIndices: [6] });
+          playRaidSfx('breach', SHOWCASE_VOLLEY, true);
+        });
+        later(7300, () => {
+          raidPhaseRef.current = 'breach';
+          setRaidPhase('breach');
+          setPopulation(126);
+          setVitals((current) => ({ ...current, DEFENSE: 26, MORALE: 42, THREAT: 45 }));
+          setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
+          setLiveHouses(aftermathHouses);
+          setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
+          showEpic('THE WALL WAS BREACHED', '3 fireballs pierced · 6 souls lost');
+        });
+        return;
+      }
+
+      if (scene === 'aftermath') {
+        setShotDashboard(true, 'city');
+        setShotTime('dusk');
+        setPopulation(126);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 38));
+        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
+        setLiveHouses(aftermathHouses);
+        setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
+        raidPhaseRef.current = 'breach';
+        setRaidPhase('breach');
+        handleRef.current?.focusOverview();
+        showEpic('THE COST OF DAWN', 'u/quiet_marrow’s home was struck');
+        playTrack('raid');
+        return;
+      }
+
+      if (scene === 'rebuild') {
+        setShotDashboard(true, 'city');
+        setShotTime('day');
+        setPopulation(126);
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
+        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 8));
+        setLiveHouses(aftermathHouses);
+        setLiveReconstruction(SHOWCASE_RECONSTRUCTION);
+        handleRef.current?.focusOverview();
+        playTrack('dusk');
+        later(900, () => {
+          handleRef.current?.rebuildHouse(6);
+          playSound('rebuild_done');
+          showEpic('THE CITY REBUILT A HOME', 'u/quiet_marrow’s house stands again');
+        });
+        later(2700, () => {
+          setLiveHouses(showcaseHouses(132));
+          setLiveReconstruction(EMPTY_RECONSTRUCTION);
+          pushNotif('🏠', 'the rebuild queue is clear', 'good');
+        });
+        return;
+      }
+
+      if (scene === 'puzzle') {
+        setShotDashboard(true, 'city');
+        setShotTime('dusk');
+        setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
+        setLiveHouses(showcaseHouses(132));
+        setLiveReconstruction(EMPTY_RECONSTRUCTION);
+        setLiveDome(showcaseDome(SHOWCASE_DOME_WORN, 11));
+        playTrack('dusk');
+        later(450, () => {
+          setPuzzleBusy(true);
+          setPuzzleBanner(null);
+          getPuzzle()
+            .then((data) => {
+              setPuzzleData(data);
+              setPuzzleLevel(data.level);
+              setPuzzleOpen(true);
+            })
+            .catch(() => pushNotif('🔌', "today's puzzle is offline, try again", 'bad'))
+            .finally(() => setPuzzleBusy(false));
+        });
+        for (let step = 0; step < 8; step += 1) {
+          later(1700 + step * 380, () => document.querySelector<HTMLButtonElement>('.pz-btn.pz-hint:not(:disabled)')?.click());
+        }
+        later(4800, () => {
+          handleRef.current?.repairDomeSegment(3);
+          setLiveDome(showcaseDome([80, 15, 60, 100, 95, 45], 0));
+          pushNotif('🛡', 'daily puzzle restored shield panel 4', 'good');
+        });
+        return;
+      }
+
+      setShotDashboard(false);
+      setShotTime('dawn');
+      dayRef.current = 7;
+      setDay(7);
+      setPopulation(126);
+      setLiveBuild(demoBuildStatus(SHOWCASE_UNLOCKED, 0, 39));
+      setLiveHouses(showcaseHouses(132));
+      setLiveReconstruction(EMPTY_RECONSTRUCTION);
+      setLiveDome(showcaseDome([80, 15, 60, 100, 95, 45], 0));
+      setRaidDays(6);
+      const report: DawnReport = {
+        day: 6,
+        citySummary: [
+          'The dome turned three fireballs aside; three reached the city.',
+          'Six souls were lost. The community rebuilt u/quiet_marrow’s home.',
+          'The daily circuit restored shield panel 4 before sunrise.',
+        ],
+        yourImpact: ['You added labor to the rebuild.', 'You reconnected the city puzzle.'],
+        title: 'Wall-Warden',
+        raidAftermath: {
+          held: false,
+          wallBreached: true,
+          housesDestroyed: [],
+          housesDamaged: 1,
+          reconstructionRequired: 5,
+          fireballs: SHOWCASE_VOLLEY,
+          penetrations: 3,
+          soulsLost: 6,
+          segmentsBefore: SHOWCASE_DOME_READY,
+          segmentsAfter: SHOWCASE_DOME_WORN,
+        },
+      };
+      setDawnReport(report);
+      setDawnOpen(true);
+      handleRef.current?.focusOverview();
+      playTrack('dawn');
+      playSound('dawn_report');
+      later(4000, () => {
+        setDawnOpen(false);
+        setShotDashboard(true, 'map', 'world');
+      });
+    },
+    [clearShowcaseTimers, pushNotif, showEpic],
+  );
+
   // QA hooks: window.__omdDemo.raidNow() / .build() / .sayHi() /
   // .selectVillager(name) / .action(id) / .scavenge(routeId) /
   // .contribute(user?) / .buyHouse(user?) / .stats()
@@ -5193,6 +5528,9 @@ export function App() {
         onBuilt={onBuilt}
         onVillager={onVillager}
       />
+      {showcaseEnabled && (
+        <DemoDirector ready={loaded && mode === 'live'} onScene={applyShowcaseScene} onStartAudio={startShowcaseAudio} />
+      )}
       <TopBar vitals={vitals} population={population} subtitle={subtitle} cityName={liveCityName} />
       {/* Progressive disclosure: ONE temporary HUD message at a time. Priority:
           dawn report teaser, urgent raid, the daily mission, then the rekindle

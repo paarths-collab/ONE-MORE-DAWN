@@ -42,7 +42,8 @@ const rootToGame = () => ({
   name: 'root-to-game-html',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      if (req.url === '/' || req.url === '/index.html') req.url = '/game.html';
+      const [path, query] = (req.url ?? '/').split('?', 2);
+      if (path === '/' || path === '/index.html') req.url = `/game.html${query ? `?${query}` : ''}`;
       next();
     });
   },
