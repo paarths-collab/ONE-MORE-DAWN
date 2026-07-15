@@ -1,5 +1,9 @@
 # One More Dawn — Plan 1: Vertical Slice Implementation Plan
 
+> **Historical implementation plan.** This document predates the Three.js +
+> React V1. It is retained for provenance; `README.md` and `docs/V1_SCOPE.md`
+> describe the current product.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The Day-3 vertical slice: open post → see city → pick role → spend energy → run mission → bank loot → vote → force-resolve → see tomorrow change.

@@ -1,5 +1,8 @@
 # Plan 3 — Reward & Retention Layer (2026-07-05)
 
+> **Historical implementation plan.** Retained for provenance only; current
+> player-facing scope lives in `README.md` and `docs/V1_SCOPE.md`.
+
 Implements spec §12. Two implementer agents run IN PARALLEL; this documents
 the in-flight work. Standard protocol: agents touch only their listed files,
 never run git; controller runs the full gate and commits.

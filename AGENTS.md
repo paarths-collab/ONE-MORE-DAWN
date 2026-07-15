@@ -2,14 +2,14 @@ You are writing a Devvit web application that will be executed on Reddit.com.
 
 ## Tech Stack
 
-- **Frontend**: Phaser, Vite
-- **Backend**: Node.js v22 serverless environment (Devvit), Hono, TRPC
-- **Communication**: tRPC v11 for end-to-end type safety
+- **Frontend**: Three.js, React, TypeScript, Vite
+- **Backend**: Node.js v22 serverless environment (Devvit), Hono
+- **Communication**: Same-origin JSON API routes under `/api/`, with shared
+  TypeScript types in `/src/shared`
 
 ## Layout & Architecture
 
 - `/src/server`: **Backend Code**. This runs in a secure, serverless environment.
-  - `trpc.ts`: Defines the API router and procedures.
   - `index.ts`: Main server entry point (Hono app).
   - Access `redis`, `reddit`, and `context` here via `@devvit/web/server`.
 - `/src/client`: **Frontend Code**. This is executed inside of an iFrame on reddit.com
@@ -18,6 +18,16 @@ You are writing a Devvit web application that will be executed on Reddit.com.
     - `game.html`: The main React entry point (Expanded View).
     - `splash.html`: The initial React entry point (Inline View). This will be shown in the reddit.com feed. Please keep it fast and keep heavy dependencies inside of `game.html`
 - `/src/shared`: **Shared Code**. Code to share between the client and server
+
+## Current Product Contract
+
+- The live game is the Three.js city and React HUD in `/src/client`; do not add
+  Phaser, a separate expedition, or a second client surface for V1.
+- Each subreddit installation owns one shared city. Multiple game posts in that
+  subreddit show the same state; a different subreddit gets a different city.
+- The current, player-facing V1 contract lives in `README.md` and
+  `docs/V1_SCOPE.md`. Files under `docs/superpowers/` are historical plans, not
+  a promise to players or judges.
 
 ## Frontend
 

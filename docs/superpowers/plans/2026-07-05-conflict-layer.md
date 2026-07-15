@@ -1,5 +1,8 @@
 # One More Dawn — Plan 2: Conflict Layer + Submission
 
+> **Historical implementation plan.** Retained for provenance only; do not use
+> it as current player, submission, or architecture documentation.
+
 **Goal:** Ship the conflict layer that makes the game Reddit-native (factions
 competing to shape the city's laws + external raid pressure), fix the
 audit-confirmed balance problem, add a leaderboard, polish the pieces judges

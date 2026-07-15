@@ -1,5 +1,9 @@
 # One More Dawn — V1 Launch-Readiness Audit
 
+> **Time-stamped audit snapshot.** This report records findings before later V1
+> repairs and should not be read as the current feature list. The current release
+> contract is [`../V1_SCOPE.md`](../V1_SCOPE.md).
+
 > Read-only audit. No game code was modified; this is the only file created/edited.
 > (It replaces an earlier draft at this path — a prior pass reached a compatible
 > ~7.2/10; this version is re-verified against the current `main` with `file:line`

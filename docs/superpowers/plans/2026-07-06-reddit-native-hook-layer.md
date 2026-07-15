@@ -1,5 +1,8 @@
 # One More Dawn — Reddit-Native Hook Layer (LOCKED DIRECTION)
 
+> **Historical implementation plan.** The direction informed later work, but
+> this file is not a promise of the shipped V1 surface.
+
 **Decided 2026-07-06.** Grounded in cited research (deep-research wf_0348073e:
 Reddit motivation = community + **status** + entertainment, NOT information;
 90% engage via **low-effort** acts; r/place proved **subreddit tribalism** +

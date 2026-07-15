@@ -1,5 +1,10 @@
 # One More Dawn — Scenario Bible
 
+> **Historical engineering reference.** This scenario bible includes systems from
+> earlier prototypes, including removed mission routes. It is useful for design
+> provenance, but it is not the current V1 contract. Use
+> [`../V1_SCOPE.md`](../V1_SCOPE.md) and the current source for shipped behavior.
+
 > **Status:** Living contract. Every number below is copied from real source. Where a
 > value is a named constant, the constant is cited inline (e.g. `BALANCE.hunger.deathsPerMissingFood = 0.3`)
 > so any reader can `grep` it and confirm the doc has not drifted from code.

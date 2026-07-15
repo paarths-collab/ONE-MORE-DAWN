@@ -1,5 +1,10 @@
 # Scenario Matrix — expected behavior (QA checklist)
 
+> **Historical QA reference.** Some rows describe earlier prototype flows. For
+> the current release gate, use
+> [`../audit/private-subreddit-v1-smoke.md`](../audit/private-subreddit-v1-smoke.md)
+> and validate behavior against the current V1 scope.
+
 > One row per situation. **Trigger condition** cites the real constant; **Expected game
 > behavior** is what the resolver / lazy loop / route actually does today; **Where enforced**
 > is the file that owns the rule. Rows marked `[FINDING]` are places the real code differs

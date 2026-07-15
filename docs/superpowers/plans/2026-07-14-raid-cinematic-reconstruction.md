@@ -1,5 +1,9 @@
 # Raid Cinematic + Community Reconstruction — Implementation Contract
 
+> **Historical implementation plan.** It includes demo/showcase material; the
+> live V1 raid is forecast/report-driven unless verified otherwise in a real
+> Devvit playtest.
+
 The raid becomes a short stylized siege-at-dawn (warning → fireballs → impact →
 damage state → aftermath), and destroyed houses enter a SHARED reconstruction
 queue the whole city rebuilds. A house belongs to one Redditor; when it falls,

@@ -4,13 +4,27 @@ Judges evaluate the **public demo post**, and Devpost says it should be
 self-explanatory. An empty post reads as a dead game. Use this checklist to make
 the post feel alive before submission.
 
+## 0. What a visitor should understand in 60 seconds
+
+Before inviting testers or recording, open the post as a first-time visitor and
+confirm these ideas are visible without an explanation from the builder:
+
+| Visitor question | Proof on the post |
+|---|---|
+| What is this? | The Camp, city title, and a clear shared-city line are visible. |
+| Is this my private city? | The UI says the subreddit shares one city. |
+| What can I do? | Role choice, daily actions, and a visible energy count are reachable. |
+| Why should I care? | A first contribution creates a house and the raid countdown creates urgency. |
+| Is it social? | Crisis, Council, The Marked, and City Chatter are visible in LIVE. |
+| What happens next? | A Dawn Report or seeded timeline shows that the city remembers outcomes. |
+
 ## 1. Create the post + seed it
 
 1. After the private smoke passes, `npm run launch` (or `npm run dev` for a playtest sub) and install on your
    demo subreddit.
 2. Run the mod menu action **"One More Dawn: seed demo state"** on the post.
-   This loads a Day-5 city mid-raid: 9 citizens, The Marked mid-rescue, live
-   crisis + council votes, faction standings, and a 3-day chronicle.
+   This loads a populated mid-run city with The Marked, live decisions, visible
+   contributors, civic progress, and timeline history.
 3. Open the post yourself and confirm the hook reads in ~10 seconds.
 
 ## 2. Drive real activity (small tester pass)

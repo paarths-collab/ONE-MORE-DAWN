@@ -1,5 +1,8 @@
 # Coins, Shop, Civic Projects, and Launch Showcase Plan
 
+> **Historical planning document.** It contains proposals and dated delivery
+> estimates. Treat the current source and `README.md` as authoritative.
+
 Status: proposed. Approve the locked product rules before implementation.
 
 ## 0. Goal

@@ -1,5 +1,9 @@
 # Pixel Village — Design System (extracted from Pixel Village.dc.html)
 
+> **Historical prototype reference, not the current UI system.** This document
+> describes an earlier Phaser village/dashboard concept. The live client is the
+> Three.js city and React HUD described in [`../V1_SCOPE.md`](../V1_SCOPE.md).
+
 The game's front-end reskin. Two views toggled by a VILLAGE / DASHBOARD switch:
 **Village** (pixel top-down town, villagers = real masked users, buildings =
 zones with live counts) and **Dashboard** (dark data console). Warm-dark retro

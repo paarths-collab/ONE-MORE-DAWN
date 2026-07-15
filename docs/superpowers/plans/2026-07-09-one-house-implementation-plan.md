@@ -1,5 +1,8 @@
 # One Redditor, One House — Implementation Plan (Codex + Claude split)
 
+> **Historical implementation plan.** The one-house feature is now implemented;
+> validate current behavior against `src/`, `README.md`, and `docs/V1_SCOPE.md`.
+
 Spec: [`docs/superpowers/specs/2026-07-09-one-redditor-one-house-design.md`](../specs/2026-07-09-one-redditor-one-house-design.md)
 
 Two lanes with **exclusive file ownership** (no merge conflicts) built against a
